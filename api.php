@@ -361,7 +361,7 @@ class api{
 
 
   function header_remove(string $name=null):void{
-    \header_remove($name);
+    headers_sent() or \header_remove($name);
     if(PHP_SAPI==='cli' && $objects=array_column(debug_backtrace(),'object') && $obj=end($objects))
       if($name) unset($obj->headers_list[$name]);
       else unset($obj->headers_list);
