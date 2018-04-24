@@ -43,8 +43,6 @@ class api{
     return $this();
   }
 
-  function GET(){}
-
 
   final function __debugInfo():array{#{{{
     $data = [];
