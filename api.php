@@ -351,7 +351,7 @@ class api{
 
   function headers_list():array{
     if(PHP_SAPI==='cli'){
-      array_values(array_map(function($v,$k){
+      return array_values(array_map(function($v,$k){
         return "$k: $v";
       },array_column(debug_backtrace(),'object')[-1]->headers_list??[]));
     }else return \headers_list();
@@ -360,7 +360,8 @@ class api{
 
   function header_remove(string $name=null):void{
     headers_sent() or \header_remove($name);
-    if(PHP_SAPI==='cli' && $objects=array_column(debug_backtrace(),'object') && $obj=end($objects))
+    $objects=array_column(debug_backtrace(),'object');
+    if(PHP_SAPI==='cli' && $obj=end($objects))
       if($name) unset($obj->headers_list[$name]);
       else unset($obj->headers_list);
   }
