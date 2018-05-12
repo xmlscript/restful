@@ -86,6 +86,11 @@ class api{
   }#}}}
 
 
+  final function __toString():string{
+    return $this()??'';
+  }
+
+
   final function __invoke():?string{
 
     try{#{{{
