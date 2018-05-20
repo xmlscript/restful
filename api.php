@@ -290,8 +290,7 @@ class api{
 
         case 'text/html'://为了兼容传统action提交
           if($data instanceof \Throwable){
-            //http_response_code($code=$data->getCode()?:500) and header_remove('Content-Type');
-            return "<h1>Error $code</h1><p>".$data->getMessage();
+            return '<h1>Error '.http_response_code().'</h1>'.$data->getCode()?'<p>'.$data->getMessage():'';
           }elseif(is_scalar($data)||is_null($data))
             return $data;
           else
