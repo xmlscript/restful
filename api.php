@@ -95,8 +95,13 @@ class api{
 
     try{#{{{
 
-      if($_SERVER['QUERY_STRING']=='??')
+      if(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='?')
+        return '<h1>Docs</h1><p>'.$_SERVER['REQUEST_URI'];
+      elseif(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='??')
+        return '<h1>Docs</h1><p>'.$_SERVER['REQUEST_URI'].'<style>body{background:#eee}</style>';
+      elseif(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='!')
         $proxy = $this->__debugInfo();
+
       elseif(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
         $proxy = static::$method(...$this->query2parameters($method, $_GET));
       else
