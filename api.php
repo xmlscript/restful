@@ -136,7 +136,8 @@ class api{
     catch(\Throwable $e){
       ob_get_length() and ob_clean();
       http_response_code($e->getCode()?:500) and header_remove('Content-Type');
-      return $payload = $this->vary(['code'=>$e->getCode()?:500,'reason'=>$e->getCode()?$e->getMessage():''],@$_SERVER['HTTP_ACCEPT']);
+      return $payload = $this->vary($e, @$_SERVER['HTTP_ACCEPT']);
+      //return $payload = $this->vary(['code'=>$e->getCode()?:500,'reason'=>$e->getCode()?$e->getMessage():''],@$_SERVER['HTTP_ACCEPT']);
     }
 
     finally{#{{{
@@ -230,7 +231,7 @@ class api{
   }#}}}
 
 
-  final private function query2parameters(string $method, array $args):\Generator{
+  final private function query2parameters(string $method, array $args):\Generator{#{{{
     //if(method_exists($this,$method))
     foreach((new \ReflectionMethod($this,$method))->getParameters() as $param){
       $name = strtolower($param->name);
@@ -250,7 +251,7 @@ class api{
       else
         throw new \InvalidArgumentException("缺少必要的查询参数{$name}",400);
     }
-  }
+  }#}}}
 
 
   final private function q(string $str=null):array{#{{{
@@ -287,6 +288,15 @@ class api{
     foreach(array_keys(self::q($ACCEPT)) as $item)
       switch(strtolower($item)){#{{{
 
+        case 'text/html'://为了兼容传统action提交
+          if($data instanceof \Throwable){
+            //http_response_code($code=$data->getCode()?:500) and header_remove('Content-Type');
+            return "<h1>Error $code</h1><p>".$data->getMessage();
+          }elseif(is_scalar($data)||is_null($data))
+            return $data;
+          else
+            break;
+
         case 'application/xml':
         case 'text/xml':
           if($data instanceof \SimpleXMLElement){
@@ -298,7 +308,10 @@ class api{
         case 'application/json':
           header("content-type: application/json;charset=$charset");
 
-          if($data instanceof \Google\Protobuf\Message) return $data->toJsonString();
+          if($data instanceof \Throwable)
+            return json_encode(['code'=>http_response_code(),'reason'=>$e->getCode()?$e->getMessage():''], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+          elseif($data instanceof \Google\Protobuf\Message)
+            return $data->toJsonString();
           elseif($str=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION)) return $str;
           else break;
 
