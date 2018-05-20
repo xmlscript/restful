@@ -95,7 +95,9 @@ class api{
 
     try{#{{{
 
-      if(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
+      if($_SERVER['QUERY_STRING']=='??')
+        $proxy = $this->__debugInfo();
+      elseif(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
         $proxy = static::$method(...$this->query2parameters($method, $_GET));
       else
         throw new \BadMethodCallException('Not Implemented',501);
