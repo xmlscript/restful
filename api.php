@@ -290,7 +290,7 @@ class api{
 
         case 'text/html'://为了兼容传统action提交
           if($data instanceof \Throwable){
-            return '<h1>Error '.http_response_code().'</h1>'.$data->getCode()?'<p>'.$data->getMessage():'';
+            return '<h1>Error '.http_response_code().'</h1>'.($data->getCode()?'<p>'.$data->getMessage():'');
           }elseif(is_scalar($data)||is_null($data))
             return $data;
           else
@@ -308,7 +308,7 @@ class api{
           header("content-type: application/json;charset=$charset");
 
           if($data instanceof \Throwable)
-            return json_encode(['code'=>http_response_code(),'reason'=>$e->getCode()?$e->getMessage():''], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            return json_encode(['code'=>http_response_code(),'reason'=>$data->getCode()?$data->getMessage():''], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
           elseif($data instanceof \Google\Protobuf\Message)
             return $data->toJsonString();
           elseif($str=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION)) return $str;
