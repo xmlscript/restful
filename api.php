@@ -261,8 +261,7 @@ class api{
   }#}}}
 
 
-  final private function q(string $str=null):array{#{{{
-    if(empty($str)) return [];
+  final function q(string $str=''):array{#{{{
     $result = $tmp = [];
     foreach(explode(',',$str) as $item){
       if(strpos($item,';')===false){
@@ -278,7 +277,7 @@ class api{
     }
     $result += array_fill_keys(array_filter(array_map('trim',$tmp)),0.5);
     arsort($result);
-    return $result;
+    return $result?:['*/*'];
   }#}}}
 
 
