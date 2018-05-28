@@ -277,7 +277,7 @@ class api{
     }
     $result += array_fill_keys(array_filter(array_map('trim',$tmp)),0.5);
     arsort($result);
-    return $result?:['*/*'];
+    return $result?:['*/*'=>0.5];
   }#}}}
 
 
