@@ -314,7 +314,7 @@ class api{
           header("content-type: application/json;charset=$charset");
 
           if($data instanceof \Throwable)
-            return json_encode(['code'=>http_response_code(),'reason'=>$data->getCode()?$data->getMessage():'']+(array)$data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            return json_encode(['code'=>http_response_code(),'reason'=>$data->getCode()?$data->getMessage():'']+json_decode(json_encode($data),true), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
           elseif($data instanceof \Google\Protobuf\Message)
             return $data->toJsonString();
           elseif($str=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION)) return $str;
