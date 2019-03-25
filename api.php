@@ -96,9 +96,9 @@ class api{
     try{#{{{
 
       if(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='?')
-        return '<h1>Docs</h1><p>'.$_SERVER['REQUEST_URI'];
+        return $payload = '<h1>Docs</h1><p>'.$_SERVER['REQUEST_URI'];
       elseif(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='??')
-        return '<h1>Docs</h1><p>'.$_SERVER['REQUEST_URI'].'<style>body{background:#eee}</style>';
+        return $payload = '<h1>Docs</h1><p>'.$_SERVER['REQUEST_URI'].'<style>body{background:#eee}</style>';
       elseif(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='!')
         $proxy = $this->__debugInfo();
 
