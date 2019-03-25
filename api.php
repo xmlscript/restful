@@ -123,7 +123,6 @@ class api{
       };
 
 
-      //FIXME 解析错误！！！
       $header = function(string $str):?string{
         foreach(array_reverse(headers_list()) as $item){
           [$k,$v] = explode(':',$item,2);
