@@ -378,7 +378,7 @@ class api{
   }
 
 
-  static function header(string $str):?string{
+  final static function header(string $str):?string{
     foreach(array_reverse(headers_list()) as $item){
       [$k,$v] = explode(':',$item,2);
       if(strcasecmp($str, $k)===0)
