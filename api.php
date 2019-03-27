@@ -305,9 +305,8 @@ class api{
           if($data instanceof \SimpleXMLElement){
             header("Content-Type: $item;charset=$charset");
             return $data->saveXML();
-          }elseif($data instanceof \PDO){
-            header("Content-Type: $item;charset=$charset");
-            //TODO
+          //}elseif($data instanceof \PDO){
+            //header("Content-Type: $item;charset=$charset");
           }else break;
 
         case '*/*':
@@ -321,9 +320,8 @@ class api{
           }elseif(is_string($data)&&strlen($data)>1&&$data[0]==='"'&&$data[-1]==='"'&&is_string(json_decode($data,false,1))){
             header("Content-Type: application/json;charset=$charset");
             return $data;
-          }elseif($data instanceof \PDO){
-            header("Content-Type: application/json;charset=$charset");
-            //TODO
+          //}elseif($data instanceof \PDO){
+            //header("Content-Type: application/json;charset=$charset");
           }elseif($str=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION)){
             header("Content-Type: application/json;charset=$charset");
             return $str;
@@ -341,9 +339,8 @@ class api{
             header("content-type: $item;charset=$charset");
             array_walk_recursive($data,function(&$v){$v=(is_object($v)&&!($v instanceof \DateTime))?(array)$v:$v;});
             return yaml_emit($data,YAML_UTF8_ENCODING);
-          }elseif($data instanceof \PDO){
-            header("content-type: $item;charset=$charset");
-            //TODO
+          //}elseif($data instanceof \PDO){
+            //header("content-type: $item;charset=$charset");
           }else break;
 
         case 'text/event-stream'://仅限于GET方法
@@ -364,9 +361,8 @@ class api{
           if(is_array($data)){
             header("Content-Type: text/csv;charset=$charset");
             //TODO 必须是整齐的二维数组，用tab分割
-          }elseif($data instanceof \PDO){
-            header("Content-Type: text/csv;charset=$charset");
-            //TODO
+          //}elseif($data instanceof \PDO){
+            //header("Content-Type: text/csv;charset=$charset");
           }elseif(is_scalar($data)||is_null($data)){
             header("Content-Type: text/plain;charset=$charset");
             return $data;
