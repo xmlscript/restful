@@ -122,17 +122,7 @@ class api{
         ];
       };
 
-
-      $header = function(string $str):?string{
-        foreach(array_reverse(headers_list()) as $item){
-          [$k,$v] = explode(':',$item,2);
-          if(strcasecmp($str, $k)===0)
-            return $v;
-        }
-        return null;
-      };
-
-      $content_type = $parse_content_type($header('Content-Type'));
+      $content_type = $parse_content_type(self::header('Content-Type'));
 
       return $payload = $this->vary(
         $proxy,
@@ -144,7 +134,7 @@ class api{
     catch(\Throwable $e){
       ob_get_length() and ob_clean();
       http_response_code($e->getCode()?:500) and header_remove('Content-Type');
-      //FIXME 只有JSON负责格式化错误？
+      //错误对象仍然适配json/xml/yaml/csv，fallback到json
       return $payload = $this->vary(['code'=>$e->getCode()?:500,'reason'=>$e->getCode()?$e->getMessage():''],@$_SERVER['HTTP_ACCEPT'].',application/json');
     }
 
@@ -291,8 +281,11 @@ class api{
 
     if(is_resource($data))
       throw new \UnexpectedValueException('Unexpected Value',500);
-    elseif($data instanceof \Iterator)
-      $data = iterator_to_array($data);//FIXME 白白浪费了yield性能
+    elseif($data instanceof \Iterator){
+      //FIXME 白白浪费了yield性能
+      //TODO 不如让各自MIME自行判断，仍然yield
+      $data = iterator_to_array($data);
+    }
 
     $ACCEPT = $ACCEPT??ini_get('default_mimetype').',*/*';
     $charset = $charset??ini_get('default_charset');
@@ -305,8 +298,9 @@ class api{
           if($data instanceof \SimpleXMLElement){
             header("Content-Type: $item;charset=$charset");
             return $data->saveXML();
-          //}elseif($data instanceof \PDO){
-            //header("Content-Type: $item;charset=$charset");
+          }elseif($data instanceof \PDOStatement){
+            header("Content-Type: $item;charset=$charset");
+            return $data->fetchAll();
           }else break;
 
         case '*/*':
@@ -320,8 +314,9 @@ class api{
           }elseif(is_string($data)&&strlen($data)>1&&$data[0]==='"'&&$data[-1]==='"'&&is_string(json_decode($data,false,1))){
             header("Content-Type: application/json;charset=$charset");
             return $data;
-          //}elseif($data instanceof \PDO){
-            //header("Content-Type: application/json;charset=$charset");
+          }elseif($data instanceof \PDOStatement){
+            header("Content-Type: application/json;charset=$charset");
+            return json_encode($data->fetchAll(PDO::FETCH_CLASS), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
           }elseif($str=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION)){
             header("Content-Type: application/json;charset=$charset");
             return $str;
@@ -337,10 +332,11 @@ class api{
         case 'text/yaml':
           if(extension_loaded('yaml')){//FIXME 同时支持yaml扩展和yaml库
             header("content-type: $item;charset=$charset");
-            array_walk_recursive($data,function(&$v){$v=(is_object($v)&&!($v instanceof \DateTime))?(array)$v:$v;});
+            is_scalar($data) || array_walk_recursive($data,function(&$v){$v=(is_object($v)&&!($v instanceof \DateTime))?(array)$v:$v;});
             return yaml_emit($data,YAML_UTF8_ENCODING);
-          //}elseif($data instanceof \PDO){
-            //header("content-type: $item;charset=$charset");
+          }elseif($data instanceof \PDOStatement){
+            header("content-type: $item;charset=$charset");
+            return yaml_emit($data->fetchAll(PDO::FETCH_CLASS),YAML_UTF8_ENCODING);
           }else break;
 
         case 'text/event-stream'://仅限于GET方法
@@ -357,26 +353,38 @@ class api{
 
         case 'text/*':
         case 'text/csv':
-        case 'text/plain':
           if(is_array($data)){
             header("Content-Type: text/csv;charset=$charset");
+            return 'TODO csv';
             //TODO 必须是整齐的二维数组，用tab分割
-          //}elseif($data instanceof \PDO){
-            //header("Content-Type: text/csv;charset=$charset");
-          }elseif(is_scalar($data)||is_null($data)){
-            header("Content-Type: text/plain;charset=$charset");
-            return $data;
-          }else break;
+          }elseif($data instanceof \PDOStatement){
+            header("Content-Type: text/csv;charset=$charset");
+            return '$data->fetchAll()';
+          }//故意没有break
+
+        case 'text/plain':
+          header("Content-Type: text/plain;charset=$charset");
+          break;
 
       }#}}}
 
     //TODO 开发者强制mime必须放行！除非无法转换
-    if(is_string($data)||is_numeric($data)||is_null($data)){
+    if(self::header('Content-Type')&&(is_string($data)||is_numeric($data)||is_null($data))){
       return $data;
     }elseif($data instanceof \Google\Protobuf\Message){
       header("Content-Type: application/octet-stream");
       return $data;//TODO 序列化
     }else throw new \Error('Not Accepted',406);
+  }
+
+
+  static function header(string $str):?string{
+    foreach(array_reverse(headers_list()) as $item){
+      [$k,$v] = explode(':',$item,2);
+      if(strcasecmp($str, $k)===0)
+        return $v;
+    }
+    return null;
   }
 
 }
