@@ -134,8 +134,7 @@ class api{
     catch(\Throwable $e){
       ob_get_length() and ob_clean();
       http_response_code($e->getCode()?:500) and header_remove('Content-Type');
-      //错误对象仍然适配json/xml/yaml/csv，fallback到json
-      return $payload = $this->vary(['code'=>$e->getCode()?:500,'reason'=>$e->getCode()?$e->getMessage():''],@$_SERVER['HTTP_ACCEPT'].',application/json');
+      return $payload = $this->vary(['code'=>$e->getCode()?:500,'reason'=>$e->getCode()?$e->getMessage():''],'application/json');
     }
 
     finally{#{{{
@@ -279,29 +278,21 @@ class api{
 
   final private function vary($data, string $ACCEPT=null, string $charset=null):?string{
 
+    $charset = $charset??ini_get('default_charset');
+
     if(is_resource($data))
       throw new \UnexpectedValueException('Unexpected Value',500);
-    elseif($data instanceof \Iterator){
+    elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
+      header("Content-Type: $item;charset=$charset");
+      return $data->saveXML();
+    }elseif($data instanceof \Iterator){
       //FIXME 白白浪费了yield性能
       //TODO 不如让各自MIME自行判断，仍然yield
       $data = iterator_to_array($data);
     }
 
-    $ACCEPT = $ACCEPT??ini_get('default_mimetype').',*/*';
-    $charset = $charset??ini_get('default_charset');
-
-    foreach(array_keys(self::q($ACCEPT)) as $item)
+    foreach(array_keys(self::q($ACCEPT??ini_get('default_mimetype').',*/*')) as $item)
       switch(strtolower($item)){#{{{
-
-        case 'application/xml':
-        case 'text/xml':
-          if($data instanceof \SimpleXMLElement){
-            header("Content-Type: $item;charset=$charset");
-            return $data->saveXML();
-          }elseif($data instanceof \PDOStatement){
-            header("Content-Type: $item;charset=$charset");
-            return $data->fetchAll();
-          }else break;
 
         case '*/*':
         case 'application/json':
@@ -322,41 +313,39 @@ class api{
             return $str;
           }else break;
 
-        case 'application/x-yaml':
-        case 'application/x.yaml':
-        case 'application/vnd.yaml':
-        case 'application/yaml':
-        case 'text/x-yaml':
-        case 'text/x.yaml':
-        case 'text/vnd.yaml':
-        case 'text/yaml':
-          if(extension_loaded('yaml')){//FIXME 同时支持yaml扩展和yaml库
-            header("content-type: $item;charset=$charset");
-            is_scalar($data) || array_walk_recursive($data,function(&$v){$v=(is_object($v)&&!($v instanceof \DateTime))?(array)$v:$v;});
-            return yaml_emit($data,YAML_UTF8_ENCODING);
-          }elseif($data instanceof \PDOStatement){
-            header("content-type: $item;charset=$charset");
-            return yaml_emit($data->fetchAll(PDO::FETCH_CLASS),YAML_UTF8_ENCODING);
-          }else break;
 
         case 'text/event-stream'://仅限于GET方法
           header("Content-Type: text/event-stream;charset=$charset");
           header('Cache-Control: no-cache');
 
-          $id = crc32($json=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION));
+          if($data instanceof \Google\Protobuf\Message)
+            $content = $data->toJsonString(); //FIXME 序列化字符串？json？
+          else
+            $content=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
+
+          $id = crc32($content);
           $retry = $_GET['retry']&&is_numeric($_GET['retry'])&&settype($_GET['retry'])?(int)$_GET['retry']:3000;
 
           if(isset($_SERVER['HTTP_LAST_EVENT_ID']) && $_SERVER['HTTP_LAST_EVENT_ID']==$id)//把ID当作ETag来使用
             return 'retry: '.++$_SERVER['HTTP_LAST_EVENT_ID']."\n\n";//TODO 按需要自动延长retry时间
           else
-            return "id: $id\ndata: $json\nretry: $retry\n\n";
+            return "id: $id\ndata: $content\nretry: $retry\n\n";
+
+
+        case 'application/xml':
+        case 'text/xml':
+          if($data instanceof \PDOStatement){
+            header("Content-Type: $item;charset=$charset");
+            return $data->fetchAll();
+          }else break;
+
 
         case 'text/*':
         case 'text/csv':
           if(is_array($data)){
             header("Content-Type: text/csv;charset=$charset");
-            return 'TODO csv';
             //TODO 必须是整齐的二维数组，用tab分割
+            return 'TODO csv';
           }elseif($data instanceof \PDOStatement){
             header("Content-Type: text/csv;charset=$charset");
             return '$data->fetchAll()';
@@ -368,7 +357,6 @@ class api{
 
       }#}}}
 
-    //TODO 开发者强制mime必须放行！除非无法转换
     if(self::header('Content-Type')&&(is_string($data)||is_numeric($data)||is_null($data))){
       return $data;
     }elseif($data instanceof \Google\Protobuf\Message){
