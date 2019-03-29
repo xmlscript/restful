@@ -283,7 +283,7 @@ class api{
     if(is_resource($data))
       throw new \UnexpectedValueException('Unexpected Value',500);
     elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
-      header("Content-Type: $item;charset=$charset");
+      header("Content-Type: application/xml;charset=$charset");
       return $data->saveXML();
     }elseif($data instanceof \Iterator){
       //FIXME 白白浪费了yield性能
