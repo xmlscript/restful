@@ -114,27 +114,13 @@ class api{
         header('Vary: Origin');
       }
 
-
-      $parse_content_type = function(?string $string):array{
-        return [
-          'mime' => ltrim(explode(';',$string)[0]),
-          'charset' => substr(stristr($string, 'charset='),8),
-        ];
-      };
-
-      $content_type = $parse_content_type(self::header('Content-Type'));
-
-      return $payload = $this->vary(
-        $proxy,
-        $content_type['mime']?:@$_SERVER['HTTP_ACCEPT'],
-        $content_type['charset']
-      );
+      return $payload = $this->vary($proxy);
     }#}}}
 
     catch(\Throwable $e){
       ob_get_length() and ob_clean();
       http_response_code($e->getCode()?:500) and header_remove('Content-Type');
-      return $payload = $this->vary(['code'=>$e->getCode()?:500,'reason'=>$e->getCode()?$e->getMessage():''],'application/json');
+      return $payload = $this->vary(['code'=>$e->getCode()?:500,'reason'=>$e->getCode()?$e->getMessage():'']);
     }
 
     finally{#{{{
@@ -256,6 +242,7 @@ class api{
   }#}}}
 
 
+  //FIXME q乱序识别错误
   final function q(string $str=''):array{#{{{
     $result = $tmp = [];
     foreach(explode(',',$str) as $item){
@@ -276,13 +263,22 @@ class api{
   }#}}}
 
 
-  final private function vary($data, string $ACCEPT=null, string $charset=null):?string{
+  final private function vary($data):?string{
 
-    $charset = $charset??ini_get('default_charset');
 
-    if(is_resource($data))
-      throw new \UnexpectedValueException('Unexpected Value',500);
-    elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
+    $content_type = self::header('Content-Type');
+    $ACCEPT = explode(';',$content_type,2)[0]?:$_SERVER['HTTP_ACCEPT']??ini_get('default_mimetype').',*/*;q=0.1';
+    $charset = substr(stristr($content_type,'charset='),8)?:ini_get('default_charset')?:'UTF-8';
+
+    if(is_resource($data)){
+      switch(get_resource_type($data)){
+        case 'gd':
+          $ACCEPT .= ',,,image/*;q=.3';
+          break;
+        default:
+          throw new \UnexpectedValueException('Unexpected Value',500);
+      }
+    }elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
       header("Content-Type: application/xml;charset=$charset");
       return $data->saveXML();
     }elseif($data instanceof \Iterator){
@@ -291,27 +287,19 @@ class api{
       $data = iterator_to_array($data);
     }
 
-    foreach(array_keys(self::q($ACCEPT??ini_get('default_mimetype').',*/*')) as $item)
+    foreach(array_keys(self::q($ACCEPT)) as $item)
       switch(strtolower($item)){#{{{
 
-        case '*/*':
-        case 'application/json':
-          if($data instanceof \Throwable){
-            header("Content-Type: application/json;charset=$charset");
-            return json_encode(['code'=>http_response_code(),'reason'=>$data->getCode()?$data->getMessage():'']+json_decode(json_encode($data),true), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
-          }elseif($data instanceof \Google\Protobuf\Message){
-            header("Content-Type: application/json;charset=$charset");
-            return $data->toJsonString();
-          }elseif(is_string($data)&&strlen($data)>1&&$data[0]==='"'&&$data[-1]==='"'&&is_string(json_decode($data,false,1))){
-            header("Content-Type: application/json;charset=$charset");
-            return $data;
-          }elseif($data instanceof \PDOStatement){
-            header("Content-Type: application/json;charset=$charset");
-            return json_encode($data->fetchAll(PDO::FETCH_CLASS), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
-          }elseif($str=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION)){
-            header("Content-Type: application/json;charset=$charset");
-            return $str;
-          }else break;
+        case 'image/*':
+        case 'image/png':
+        case 'image/bmp':
+        case 'image/gif':
+        case 'image/webp':
+        case 'image/jpeg':
+          $fmt = str_replace('*','png',substr($item,6));
+          $fn = 'image'.$fmt;
+          self::header('Content-Type') || header("Content-Type: image/$fmt");
+          return $fn($data);
 
 
         case 'text/event-stream'://仅限于GET方法
@@ -319,7 +307,7 @@ class api{
           header('Cache-Control: no-cache');
 
           if($data instanceof \Google\Protobuf\Message)
-            $content = $data->toJsonString(); //FIXME 序列化字符串？json？
+            $content = $data->toJsonString(); //FIXME 序列化字符串
           else
             $content=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
 
@@ -355,6 +343,23 @@ class api{
           header("Content-Type: text/plain;charset=$charset");
           break;
 
+
+        case '*/*':
+        case 'application/json':
+          if($data instanceof \Google\Protobuf\Message){
+            header("Content-Type: application/json;charset=$charset");
+            return $data->toJsonString();
+          }elseif(is_string($data)&&strlen($data)>1&&$data[0]==='"'&&$data[-1]==='"'&&is_string(json_decode($data,false,1))){
+            header("Content-Type: application/json;charset=$charset");
+            return $data;
+          }elseif($data instanceof \PDOStatement){
+            header("Content-Type: application/json;charset=$charset");
+            return json_encode($data->fetchAll(PDO::FETCH_CLASS), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
+          }elseif($str=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION)){
+            header("Content-Type: application/json;charset=$charset");
+            return $str;
+          }else break;
+
       }#}}}
 
     if(self::header('Content-Type')&&(is_string($data)||is_numeric($data)||is_null($data))){
@@ -370,7 +375,7 @@ class api{
     foreach(array_reverse(headers_list()) as $item){
       [$k,$v] = explode(':',$item,2);
       if(strcasecmp($str, $k)===0)
-        return $v;
+        return trim($v);
     }
     return null;
   }
