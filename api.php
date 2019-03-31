@@ -296,10 +296,11 @@ class api{
         case 'image/gif':
         case 'image/webp':
         case 'image/jpeg':
-          $fmt = str_replace('*','png',substr($item,6));
-          $fn = 'image'.$fmt;
-          self::header('Content-Type') || header("Content-Type: image/$fmt");
-          return $fn($data);
+          if(is_resource($data) && get_resource_type($data)==='gd'){
+            $fmt = str_replace('*','png',substr($item,6));
+            self::header('Content-Type') || header("Content-Type: image/$fmt");
+            return ('image'.$fmt)($data);
+          }else break;
 
 
         case 'text/event-stream'://仅限于GET方法
