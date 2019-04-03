@@ -172,13 +172,13 @@ class api{
   }
 
 
-  private function check(?string $type,&$value, string $name, bool $allowsNull):\Generator{#{{{
+  private function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
     switch($type){
       case null:
       case 'string':
-        if(empty($value) && $allowsNull())
-          yield;
-        else
+        //if(empty($value) && $allowsNull())
+          //yield;
+        //else
           yield $value;
         break;
       case 'bool':
