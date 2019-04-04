@@ -176,9 +176,9 @@ class api{
     switch($type){
       case null:
       case 'string':
-        //if(empty($value) && $allowsNull())
-          //yield;
-        //else
+        if(empty($value) && $allowsNull)
+          yield;
+        else
           yield $value;
         break;
       case 'bool':
@@ -190,13 +190,13 @@ class api{
             throw new \RangeException($name.' Allow range from '.PHP_INT_MIN.' to '.PHP_INT_MAX,400);
           else
             yield $value;
-        }elseif(empty($value) && $allowsNull())
+        }elseif(empty($value) && $allowsNull)
           yield;
         else
           throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400);
         break;
       case 'float':
-        if(empty($value) && $allowsNull())
+        if(empty($value) && $allowsNull)
           yield;
         elseif(!is_numeric($value))
           throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400);
@@ -205,7 +205,7 @@ class api{
         break;
       case 'DateTime':
         try{
-          yield new \DateTime($value);
+          yield new \DateTime($value); //FIXME 语言特定的内置对象，不通用！
         }catch(\Exception $e){
           throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400,$e);
         }
@@ -242,27 +242,6 @@ class api{
   }#}}}
 
 
-  //FIXME q乱序识别错误
-  final function q(string $str=''):array{#{{{
-    $result = $tmp = [];
-    foreach(explode(',',$str) as $item){
-      if(strpos($item,';')===false){
-        $tmp[] = $item;//暂存
-      }else{
-        $tmp[] = strstr($item,';',true);
-        $q = filter_var(explode('q=',$item)[1], FILTER_VALIDATE_FLOAT);
-        if($q!==false&&$q>0&&$q<=1)//合法float就存入最终结果，否则不存，反正最后要清空这一轮的暂存期
-          foreach($tmp as $v)
-            $result[$v] = $q;
-        $tmp = [];//无论如何，本轮结束清空暂存区
-      }
-    }
-    $result += array_fill_keys(array_filter(array_map('trim',$tmp)),0.5);
-    arsort($result);
-    return $result?:['*/*'=>0.5];
-  }#}}}
-
-
   final private function vary($data):?string{
 
 
@@ -275,6 +254,18 @@ class api{
         case 'gd':
           $ACCEPT .= ',,,image/*;q=.3';
           break;
+
+        case 'curl':
+          header('Cache-Control: no-cache');
+          //$ACCEPT .= ',text/plain;q=.3';
+          self::header('Content-Type') || header('Content-Type: text/plain');
+          curl_setopt($data, CURLOPT_RETURNTRANSFER, true);
+          return curl_exec($data);
+
+        case 'stream': //FIXME 无法区分fopen与opendir，幸好opendir没有副作用
+          self::header('Content-Type') || header('Content-Type: text/plain');
+          return stream_get_contents($data);
+
         default:
           throw new \UnexpectedValueException('Unexpected Value',500);
       }
@@ -292,14 +283,35 @@ class api{
 
         case 'image/*':
         case 'image/png':
+          if(imagetypes() & IMG_PNG){
+            //TODO
+          }
         case 'image/bmp':
+          if(imagetypes() & IMG_BMP){
+            //TODO
+          }
         case 'image/gif':
+          if(imagetypes() & IMG_GIF){
+            //TODO
+          }
         case 'image/webp':
+          if(imagetypes() & IMG_WEBP){
+            //TODO
+          }
         case 'image/jpeg':
+          if(imagetypes() & IMG_JPEG){
+            //TODO
+          }
+
           if(is_resource($data) && get_resource_type($data)==='gd'){
             $fmt = str_replace('*','png',substr($item,6));
             self::header('Content-Type') || header("Content-Type: image/$fmt");
-            return ('image'.$fmt)($data);
+            ob_start();
+            imagecolorstotal($data) || imagecolorallocate($data,222,222,222);
+            ('image'.$fmt)($data); //能否预输出到一个stream
+            $buf = ob_get_contents();
+            ob_end_clean();
+            return $buf;
           }else break;
 
 
@@ -372,7 +384,7 @@ class api{
   }
 
 
-  final static function header(string $str):?string{
+  final private static function header(string $str):?string{
     foreach(array_reverse(headers_list()) as $item){
       [$k,$v] = explode(':',$item,2);
       if(strcasecmp($str, $k)===0)
@@ -380,6 +392,27 @@ class api{
     }
     return null;
   }
+
+
+  //FIXME q乱序识别错误
+  final private static function q(string $str=''):array{#{{{
+    $result = $tmp = [];
+    foreach(explode(',',$str) as $item){
+      if(strpos($item,';')===false){
+        $tmp[] = $item;//暂存
+      }else{
+        $tmp[] = strstr($item,';',true);
+        $q = filter_var(explode('q=',$item)[1], FILTER_VALIDATE_FLOAT);
+        if($q!==false&&$q>0&&$q<=1)//合法float就存入最终结果，否则不存，反正最后要清空这一轮的暂存期
+          foreach($tmp as $v)
+            $result[$v] = $q;
+        $tmp = [];//无论如何，本轮结束清空暂存区
+      }
+    }
+    $result += array_fill_keys(array_filter(array_map('trim',$tmp)),0.5);
+    arsort($result);
+    return $result?:['*/*'=>0.5];
+  }#}}}
 
 }
 
