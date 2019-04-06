@@ -126,7 +126,7 @@ class api{
     finally{#{{{
 
       if(empty($payload) && http_response_code()===200){
-        http_response_code(201);
+        http_response_code(204);
         return null;
       }
 
