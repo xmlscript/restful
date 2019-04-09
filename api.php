@@ -336,8 +336,13 @@ class api{
         case 'application/xml':
         case 'text/xml':
           if($data instanceof \PDOStatement){
+            //break;
             header("Content-Type: $item;charset=$charset");
-            return $data->fetchAll();
+            header('Content-Type: text/plain');
+            $data->execute();
+            $arr = $data->fetchAll(\PDO::FETCH_ASSOC);
+            var_dump($arr);
+            die('//TODO array to xml');
           }else break;
 
 
@@ -367,7 +372,7 @@ class api{
             return $data;
           }elseif($data instanceof \PDOStatement){
             header("Content-Type: application/json;charset=$charset");
-            return json_encode($data->fetchAll(PDO::FETCH_CLASS), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
+            return json_encode($data->fetchAll(\PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
           }elseif($str=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION)){
             header("Content-Type: application/json;charset=$charset");
             return $str;
