@@ -38,6 +38,7 @@ class api{
   }#}}}
 
 
+  //FIXME
   final function HEAD(){
     $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] = 'GET';
     return $this();
@@ -87,89 +88,101 @@ class api{
 
 
   final function __toString():string{
-    return $this()??'';
+    return $this();
   }
 
 
-  final function __invoke():?string{
+  final function __invoke():string{
 
-    try{#{{{
+    try{
 
-      if(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='?')
-        return $payload = '<h1>Docs</h1><p>'.$_SERVER['REQUEST_URI'];
-      elseif(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='??')
-        return $payload = '<h1>Docs</h1><p>'.$_SERVER['REQUEST_URI'].'<style>body{background:#eee}</style>';
-      elseif(isset($_SERVER['REQUEST_METHOD'])&&$_SERVER['REQUEST_METHOD']==='GET'&&$_SERVER['QUERY_STRING']==='!')
-        $proxy = $this->__debugInfo();
-
-      elseif(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
+      //FIXME 只能在POST之上覆盖为其他方法？
+      if(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
         $proxy = static::$method(...$this->query2parameters($method, $_GET));
       else
-        throw new \BadMethodCallException('Not Implemented',501);
+        throw new \BadMethodCallException('Not Implemented',501);//FIXME 能否自动触发异常？
 
 
-      if(isset($_SERVER['HTTP_ORIGIN']) && is_scalar($_SERVER['HTTP_ORIGIN'])){
-        header('Access-Control-Allow-Origin: '.$_SERVER['HTTP_ORIGIN']);
-        header("Access-Control-Allow-Credentials: true");
-        header('Vary: Origin');
-      }
-
-      return $payload = $this->vary($proxy);
-    }#}}}
-
-    catch(\Throwable $e){
-      ob_get_length() and ob_clean();
-      http_response_code($e->getCode()?:500) and header_remove('Content-Type');
-      return $payload = $this->vary(['code'=>$e->getCode()?:500,'reason'=>$e->getCode()?$e->getMessage():'']);
+      return $this->vary($proxy);
     }
 
-    finally{#{{{
+    catch(\Throwable $e){
+      ob_get_length() and ob_clean(); //FIXME 测试OB未启用时的情况
+      http_response_code(500);
+      header_remove('Content-Type');
+      return $e->getMessage();
+    }
 
-      if(empty($payload) && http_response_code()===200){
-        http_response_code(204);
-        return null;
-      }
-
-      if(
-        !headers_sent() &&
-        isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCEPT']) &&
-        strcasecmp($_SERVER['HTTP_ACCEPT'],'text/event-stream') //不是text/event-stream
-      ){
-        header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
-          $v = strstr($v,':',true);
-          return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma'])?null:$v;
-        },headers_list())),','));
-      }
-
-
-      if(
-        isset($payload) &&
-        !headers_sent() &&
-        !in_array(http_response_code(),[304,412,204,206,416])
-      ){
-
-        $etag = '"'.crc32(ob_get_contents().join(headers_list()).$payload).'"';//算法仅此一处
-
-        $comp = function(string $etag, ?string $IF, bool $W=true):bool{
-          return $IF && in_array($etag, array_map(function($v) use ($W){
-              return ltrim($v,' '.$W?'W/':'');
-            },explode(',',$IF)));
-        };
-
-        if(
-          isset($_SERVER['HTTP_IF_NONE_MATCH']) &&
-          $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH'])
-        ){
-          http_response_code(304);
-          return '';
-        }else
-          header("ETag: $etag");
-
-      }
-
-    }#}}}
+    finally{
+      //$this->CORS();
+    }
 
   }
+
+
+
+
+
+  //TODO 所有header都推迟到__toString里执行？
+  final private function xxx($payload):void{#{{{
+    if(empty($payload) && http_response_code()===200){
+      http_response_code(204);
+    }
+  }#}}}
+
+
+  final private function CORS():void{#{{{
+    if(
+      !headers_sent() &&
+      isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCEPT']) &&
+      strcasecmp($_SERVER['HTTP_ACCEPT'],'text/event-stream') //不是text/event-stream
+    ){
+      header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
+        $v = strstr($v,':',true);
+        return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma'])?null:$v;
+      },headers_list())),','));
+    }
+
+
+    if(isset($_SERVER['HTTP_ORIGIN']) && is_scalar($_SERVER['HTTP_ORIGIN'])){
+      header('Access-Control-Allow-Origin: '.$_SERVER['HTTP_ORIGIN']);
+      header("Access-Control-Allow-Credentials: true");
+      header('Vary: Origin');
+    }
+
+  }#}}}
+
+
+  final private function etag(string $payload):void{#{{{
+    if(
+      isset($payload) &&
+      !headers_sent() &&
+      !in_array(http_response_code(),[304,412,204,206,416])
+    ){
+
+      $etag = '"'.crc32(ob_get_contents().join(headers_list()).$payload).'"';//算法仅此一处
+
+      $comp = function(string $etag, ?string $IF, bool $W=true):bool{
+        return $IF && in_array($etag, array_map(function($v) use ($W){
+          return ltrim($v,' '.$W?'W/':'');
+        },explode(',',$IF)));
+      };
+
+      if(
+        isset($_SERVER['HTTP_IF_NONE_MATCH']) &&
+        $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH'])
+      ){
+        http_response_code(304);
+      }else
+        header("ETag: $etag");
+
+    }
+
+  }#}}}
+
+
+
+
 
 
   private function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
