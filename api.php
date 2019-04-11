@@ -108,9 +108,19 @@ class api{
 
     catch(\Throwable $e){
       ob_get_length() and ob_clean(); //FIXME 测试OB未启用时的情况
-      http_response_code(500);
+
+      //TODO 建议开发者抛出统一编写的业务异常，内置硬编码message和code
+
+      if(http_response_code()===200){
+        $code = $e->getCode();
+        http_response_code($code>=400&&$code<600?$code:500);
+      }
+
       header_remove('Content-Type');
-      return $e->getMessage();
+      return $this->vary([
+        'code' => $e->getCode(),
+        'reason' => $e->getMessage(),
+      ]);
     }
 
     finally{
@@ -262,7 +272,7 @@ class api{
     $ACCEPT = explode(';',$content_type,2)[0]?:$_SERVER['HTTP_ACCEPT']??ini_get('default_mimetype').',*/*;q=0.1';
     $charset = substr(stristr($content_type,'charset='),8)?:ini_get('default_charset')?:'UTF-8';
 
-    if(is_resource($data)){
+    if(is_resource($data))
       switch(get_resource_type($data)){
         case 'gd':
           $ACCEPT .= ',,,image/*;q=.3';
@@ -282,7 +292,9 @@ class api{
         default:
           throw new \UnexpectedValueException('Unexpected Value',500);
       }
-    }elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
+    elseif($data instanceof \DateTime)
+      $data = $data->format(DATE_ISO8601); //js的date方法只认ISO8601或RFC2822
+    elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
       header("Content-Type: application/xml;charset=$charset");
       return $data->saveXML();
     }elseif($data instanceof \Iterator){
@@ -358,6 +370,9 @@ class api{
             die('//TODO array to xml');
           }else break;
 
+        case 'application/soap+xml':
+          break;
+
 
         case 'text/*':
         case 'text/csv':
@@ -372,6 +387,7 @@ class api{
 
         case 'text/plain':
           header("Content-Type: text/plain;charset=$charset");
+          //TODO 生成填充数据的sql
           break;
 
 
