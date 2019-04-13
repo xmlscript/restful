@@ -295,6 +295,7 @@ class api{
     elseif($data instanceof \DateTime)
       $data = $data->format(DATE_ISO8601); //js的date方法只认ISO8601或RFC2822
     elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
+      //FIXME XML格式太丰富了，既然开发者耗费精力准备好了XML对象，不如就直接输入
       header("Content-Type: application/xml;charset=$charset");
       return $data->saveXML();
     }elseif($data instanceof \Iterator){
@@ -368,9 +369,14 @@ class api{
             $arr = $data->fetchAll(\PDO::FETCH_ASSOC);
             var_dump($arr);
             die('//TODO array to xml');
+          }elseif(is_string($data)){//TODO 相信开发者，不要浪费资源判断是否合法xml了
+            header("Content-Type: $item;charset=$charset");
+            return (string)$data;
           }else break;
 
         case 'application/soap+xml':
+          die('sdfkldslf');
+            return (string)$data;
           break;
 
 
