@@ -96,14 +96,13 @@ class api{
 
     try{
 
-      //FIXME 只能在POST之上覆盖为其他方法？
+      //FIXME 大小写？
       if(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
         $proxy = static::$method(...$this->query2parameters($method, $_GET));
       else
-        throw new \BadMethodCallException('Not Implemented',501);//FIXME 能否自动触发异常？
+        throw new \BadMethodCallException('Not Implemented',501);
 
-
-      return $this->vary($proxy);
+      return $payload = $this->vary($proxy);
     }
 
     catch(\Throwable $e){
@@ -117,19 +116,17 @@ class api{
       }
 
       header_remove('Content-Type');
-      return $this->vary([
+      return $payload = $this->vary([
         'code' => $e->getCode(),
         'reason' => $e->getMessage(),
       ]);
     }
 
     finally{
-      //$this->CORS();
+      $payload || http_response_code()===200 && http_response_code(204);
     }
 
   }
-
-
 
 
 
@@ -189,9 +186,6 @@ class api{
     }
 
   }#}}}
-
-
-
 
 
 
@@ -265,8 +259,9 @@ class api{
   }#}}}
 
 
-  final private function vary($data):?string{
+  final private function vary($data):string{
 
+    if(is_null($data)) return '';
 
     $content_type = self::header('Content-Type');
     $ACCEPT = explode(';',$content_type,2)[0]?:$_SERVER['HTTP_ACCEPT']??ini_get('default_mimetype').',*/*;q=0.1';

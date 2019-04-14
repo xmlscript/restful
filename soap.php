@@ -10,11 +10,24 @@ class soap extends api{
    * @param 都不填，显示所有方法的index.html，可以带op参数内链到具体方法的form
    * @todo restful也可以借鉴或复用
    */
-  function GET($wsdl=null, string $op=null, string $disco=null){
+  function GET(string $op=null){
     header('content-type: text/plain');
     //header('Content-Type: application/xml;charset=UTF-8');//正确生成，才输出xml头
+
+    if(isset($_GET['wsdl'])){
+      return '<wsdl>WSDL</wsdl>';
+    }elseif(isset($_GET['disco'])){
+      return '<disco>DISCO</disco>';
+    }else switch($op){
+      case 'hi':
+      case 'hey':
+        break;
+    }
+
+    return;
     var_dump($_GET);
     var_dump($wsdl);
+    var_dump(static::class);
     return '';
   }
 
@@ -135,11 +148,18 @@ class soap extends api{
   /**
    * @todo ASP.net可以用html表单直接post，可能是因为使用了<binding>
    */
-  function POST(){
+  final function POST(){
 
-    $soap = new SoapServer(self::GET(),[
-      'uri' => '', //nonWSDL模式必须有uri，但是可以随意设置，哪怕empty字符串
+    $soap = new \SoapServer(self::GET(),[
+      'uri' => 'xx', //nonWSDL模式必须有uri，但是可以随意设置，哪怕empty字符串
     ]);
+
+    $soap->setClass(static::class); //FIXME static::class 导致500异常fault
+    $soap->handle(); //调用private将产生三条log
+
+    die;//FIXME 后续的请求头控制一律忽略掉了
+
+    return $soap; //TODO null就一律忽略__invoke()后续操作
 
     /** SOAP客户端发来的请求
      * <?xml version="1.0" encoding="UTF-8"?>
@@ -185,16 +205,6 @@ class soap extends api{
      * </SOAP-ENV:Envelope>
      */
 
-
-    //$soap->addFunction('hi');
-    //$soap->addFunction('hey');
-    $soap->setClass(static::class); //FIXME static::class 导致500异常fault
-
-    $soap->handle(); //调用private将产生三条log
-
-    die;//FIXME 后续的请求头控制一律忽略掉了
-
-    return $soap; //TODO null就一律忽略__invoke()后续操作
   }
 
 }
