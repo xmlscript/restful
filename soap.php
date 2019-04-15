@@ -2,57 +2,20 @@
 
 class soap extends api{
 
-  /**
-   * @description 一个GET要担负多种角色，可能返回: WSDL, disco, index, 甚至http绑定get
-   * @param $wsdl 显示xml格式的WSDL文档
-   * @param $op 显示具体方法的form表单
-   * @param $disco 被index.html的link到一个发现服务文档
-   * @param 都不填，显示所有方法的index.html，可以带op参数内链到具体方法的form
-   * @todo restful也可以借鉴或复用
-   */
-  function GET(string $op=null){
-    header('content-type: text/plain');
-    //header('Content-Type: application/xml;charset=UTF-8');//正确生成，才输出xml头
-
-    if(isset($_GET['wsdl'])){
-      return '<wsdl>WSDL</wsdl>';
-    }elseif(isset($_GET['disco'])){
-      return '<disco>DISCO</disco>';
-    }else switch($op){
-      case 'hi':
-      case 'hey':
-        break;
-    }
-
-    return;
-    var_dump($_GET);
-    var_dump($wsdl);
-    var_dump(static::class);
-    return '';
+  final function GET():string{
+    header('Content-Type: application/xml;charset=UTF-8');
+    return $this->wsdl();
   }
 
 
   /**
-   * @description 反射index.html
-   */
-  final private function index(){#{{{
-    return '<link rel=alternate type=application/xml href=?disco>';
-    return '<link rel=alternate type=application/xml href=?WSDL>';
-  }#}}}
-
-
-  /**
-   * @description 反射具体方法的html
-   */
-  final private function op(string $method){#{{{
-
-  }#}}}
-
-
-  /**
    * @description 反射public方法生成wsdl文档
+   * @todo 能否复用__debugInfo()，排除原生方法之后，剩下的public方法一律暴露
    */
-  final private function wsdl(){#{{{
+  final private function wsdl():string{#{{{
+    //header('Content-Type: text/plain');
+    //var_dump($this->__debugInfo());die;
+    return '<definitions></definitions>';
     /**典型的WSDL文件
      * <?xml version="1.0" encoding="UTF-8"?>
      * <definitions name="MobilePhoneService"
@@ -132,34 +95,19 @@ class soap extends api{
   }#}}}
 
 
-  /**
-   * @description 发现服务
-   */
-  final private function disco(){#{{{
-    /**
-     * <discovery><contractRef ref="http://host/soap?wsdl" docRef="http://host/soap"/>
-     *   <soap address="http://host/soap" binding="q1:WeatherWebServiceSoap"/>
-     *   <soap address="http://host/soap" binding="q2:WeatherWebServiceSoap12"/>
-     * </discovery>
-     */
-  }#}}}
+  final function POST():void{
 
-
-  /**
-   * @todo ASP.net可以用html表单直接post，可能是因为使用了<binding>
-   */
-  final function POST(){
-
-    $soap = new \SoapServer(self::GET(),[
-      'uri' => 'xx', //nonWSDL模式必须有uri，但是可以随意设置，哪怕empty字符串
+    //$soap = new \SoapServer($this->wsdl(),[
+    $soap = new \SoapServer(null,[
+      'uri' => 'xx', //FIXME nonWSDL模式必须有uri，但是可以随意设置，哪怕empty字符串
     ]);
 
-    $soap->setClass(static::class); //FIXME static::class 导致500异常fault
+    $soap->setClass(static::class);
     $soap->handle(); //调用private将产生三条log
 
     die;//FIXME 后续的请求头控制一律忽略掉了
 
-    return $soap; //TODO null就一律忽略__invoke()后续操作
+    //return $soap; //TODO null就一律忽略__invoke()后续操作
 
     /** SOAP客户端发来的请求
      * <?xml version="1.0" encoding="UTF-8"?>
