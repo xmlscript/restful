@@ -163,11 +163,6 @@ class rest extends api{
             return (string)$data;
           }else break;
 
-        case 'application/soap+xml':
-          die('sdfkldslf');
-            return (string)$data;
-          break;
-
 
         case 'text/*':
         case 'text/csv':

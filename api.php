@@ -101,7 +101,7 @@ abstract class api{
     }
 
     finally{
-      $payload || http_response_code()===200 && http_response_code(204);
+      isset($payload) || http_response_code()===200 && http_response_code(204);
     }
 
   }
@@ -113,28 +113,6 @@ abstract class api{
     if(empty($payload) && http_response_code()===200){
       http_response_code(204);
     }
-  }#}}}
-
-
-  final private function CORS():void{#{{{
-    if(
-      !headers_sent() &&
-      isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCEPT']) &&
-      strcasecmp($_SERVER['HTTP_ACCEPT'],'text/event-stream') //不是text/event-stream
-    ){
-      header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
-        $v = strstr($v,':',true);
-        return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma'])?null:$v;
-      },headers_list())),','));
-    }
-
-
-    if(isset($_SERVER['HTTP_ORIGIN']) && is_scalar($_SERVER['HTTP_ORIGIN'])){
-      header('Access-Control-Allow-Origin: '.$_SERVER['HTTP_ORIGIN']);
-      header("Access-Control-Allow-Credentials: true");
-      header('Vary: Origin');
-    }
-
   }#}}}
 
 
@@ -236,7 +214,7 @@ abstract class api{
     }
   }#}}}
 
-  final private static function header(string $str):?string{
+  final protected static function header(string $str):?string{
     foreach(array_reverse(headers_list()) as $item){
       [$k,$v] = explode(':',$item,2);
       if(strcasecmp($str, $k)===0)
@@ -247,7 +225,7 @@ abstract class api{
 
 
   //FIXME q乱序识别错误
-  final private static function q(string $str=''):array{#{{{
+  final protected static function q(string $str=''):array{#{{{
     $result = $tmp = [];
     foreach(explode(',',$str) as $item){
       if(strpos($item,';')===false){
