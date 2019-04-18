@@ -95,4 +95,9 @@ abstract class rpc extends api{
      */
   }#}}}
 
+
+  final protected function vary($data):string{
+    return $data;
+  }
+
 }
