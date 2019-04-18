@@ -17,34 +17,10 @@ class api{
   }
 
 
-  final function OPTIONS($age=600):void{#{{{
-
-    $methods = implode(', ',array_keys($this->method()));
-
-    if(
-      isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']) &&
-      method_exists(static::class,$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])
-    ){
-
-      header('Access-Control-Max-Age: '.is_numeric($age)&&settype($age,'int')?$age:600);
-      header("Access-Control-Allow-Methods: $methods");
-
-      if(isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']))
-        header('Access-Control-Allow-Headers: '.$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']);
-
-    }else
-      header("Allow: $methods");
-
-  }#}}}
-
-
-  //FIXME
-  final function HEAD(){
-    $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] = 'GET';
-    return $this();
-  }
-
-
+  /**
+   * @todo 反射并生成一个标准文档，然后用模板转换成html/cli打印格式
+   * @fixme restful不能独占GET
+   */
   final function __debugInfo():array{#{{{
     $data = [];
     $data['doc'] = $this->parse((new \ReflectionClass(static::class))->getDocComment());
