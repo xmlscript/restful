@@ -63,46 +63,19 @@ abstract class api{
   }#}}}
 
 
-  final function __toString():string{
-    return $this();
-  }
+  abstract function __toString():string;
 
 
-  abstract protected function vary($data):string;
-
+  /**
+   * 允许抛出异常，以便内部二次处理，但__toString()代表正式对外生产，就不能再异常了
+   */
   final function __invoke():string{
 
-    try{
-
-      //FIXME 大小写？
-      if(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
-        $proxy = static::$method(...$this->query2parameters($method, $_GET));
-      else
-        throw new \BadMethodCallException('Not Implemented',501);
-
-      return $payload = $this->vary($proxy);
-    }
-
-    catch(\Throwable $e){
-      ob_get_length() and ob_clean(); //FIXME 测试OB未启用时的情况
-
-      //TODO 建议开发者抛出统一编写的业务异常，内置硬编码message和code
-
-      if(http_response_code()===200){
-        $code = $e->getCode();
-        http_response_code($code>=400&&$code<600?$code:500);
-      }
-
-      header_remove('Content-Type');
-      return $payload = $this->vary([
-        'code' => $e->getCode(),
-        'reason' => $e->getMessage(),
-      ]);
-    }
-
-    finally{
-      isset($payload) || http_response_code()===200 && http_response_code(204);
-    }
+    //FIXME 大小写？
+    if(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
+      return static::$method(...$this->query2parameters($method, $_GET));
+    else
+      throw new \BadMethodCallException('Not Implemented',501);
 
   }
 

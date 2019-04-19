@@ -53,7 +53,34 @@ class rest extends api{
   }#}}}
 
 
-  final protected function vary($data):string{
+  final function __toString():string{
+    try{
+      return $payload = $this->vary($this());
+    }catch(\Throwable $t){
+      ob_get_length() and ob_clean(); //FIXME 测试OB未启用时的情况
+
+      //TODO 建议开发者抛出统一编写的业务异常，内置硬编码message和code
+
+      if(http_response_code()===200){
+        $code = $e->getCode();
+        http_response_code($code>=400&&$code<600?$code:500);
+      }
+
+      header_remove('Content-Type');
+      return $payload = $this->vary([
+        'code' => $e->getCode(),
+        'reason' => $e->getMessage(),
+      ]);
+    }
+
+    finally{
+      isset($payload) || http_response_code()===200 && http_response_code(204);
+    }
+
+  }
+
+
+  final private function vary($data):string{
 
     if(is_null($data)) return '';
 
