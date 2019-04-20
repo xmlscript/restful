@@ -81,42 +81,6 @@ abstract class api{
 
 
 
-  //TODO 所有header都推迟到__toString里执行？
-  final private function xxx($payload):void{#{{{
-    if(empty($payload) && http_response_code()===200){
-      http_response_code(204);
-    }
-  }#}}}
-
-
-  final private function etag(string $payload):void{#{{{
-    if(
-      isset($payload) &&
-      !headers_sent() &&
-      !in_array(http_response_code(),[304,412,204,206,416])
-    ){
-
-      $etag = '"'.crc32(ob_get_contents().join(headers_list()).$payload).'"';//算法仅此一处
-
-      $comp = function(string $etag, ?string $IF, bool $W=true):bool{
-        return $IF && in_array($etag, array_map(function($v) use ($W){
-          return ltrim($v,' '.$W?'W/':'');
-        },explode(',',$IF)));
-      };
-
-      if(
-        isset($_SERVER['HTTP_IF_NONE_MATCH']) &&
-        $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH'])
-      ){
-        http_response_code(304);
-      }else
-        header("ETag: $etag");
-
-    }
-
-  }#}}}
-
-
 
   private function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
     switch($type){
@@ -219,38 +183,42 @@ abstract class api{
 
 }
 
-  function header(string $string, bool $replace=true, int $code=null):void{
-    if(!headers_sent()){
-      \header($string, $replace, $code);
-      if(PHP_SAPI==='cli' && stripos($string,'HTTP/')!==0 && $objects=array_column(debug_backtrace(),'object'))
-        (function(string $key, string $value, bool $replace){
-          if($replace || empty($this->headers_list[$key]))
-            $this->headers_list[$key] = $value;
-          else
-            $this->headers_list[$key] .= ", $value";
-        })->call(
-          end($objects),//FIXME reset第一个？next第二个？end最后一个？
-          strtolower(strstr($string,':',true)),
-          trim(substr($string, strpos($string, ':')+1)),
-          $replace
-        );
-    }
+
+/**
+ * 兼容cli模式的swoole
+ */
+function header(string $string, bool $replace=true, int $code=null):void{
+  if(!headers_sent()){
+    \header($string, $replace, $code);
+    if(PHP_SAPI==='cli' && stripos($string,'HTTP/')!==0 && $objects=array_column(debug_backtrace(),'object'))
+      (function(string $key, string $value, bool $replace){
+        if($replace || empty($this->headers_list[$key]))
+          $this->headers_list[$key] = $value;
+        else
+          $this->headers_list[$key] .= ", $value";
+      })->call(
+        end($objects),//FIXME reset第一个？next第二个？end最后一个？
+        strtolower(strstr($string,':',true)),
+        trim(substr($string, strpos($string, ':')+1)),
+        $replace
+      );
   }
+}
 
 
-  function headers_list():array{
-    if(PHP_SAPI==='cli'){
-      return array_values(array_map(function($v,$k){
-        return "$k: $v";
-      },array_column(debug_backtrace(),'object')[-1]->headers_list??[]));
-    }else return \headers_list();
-  }
+function headers_list():array{
+  if(PHP_SAPI==='cli'){
+    return array_values(array_map(function($v,$k){
+      return "$k: $v";
+    },array_column(debug_backtrace(),'object')[-1]->headers_list??[]));
+  }else return \headers_list();
+}
 
 
-  function header_remove(string $name=null):void{
-    headers_sent() or \header_remove($name);
-    $objects=array_column(debug_backtrace(),'object');
-    if(PHP_SAPI==='cli' && $obj=end($objects))
-      if($name) unset($obj->headers_list[$name]);
-      else unset($obj->headers_list);
-  }
+function header_remove(string $name=null):void{
+  headers_sent() or \header_remove($name);
+  $objects=array_column(debug_backtrace(),'object');
+  if(PHP_SAPI==='cli' && $obj=end($objects))
+    if($name) unset($obj->headers_list[$name]);
+    else unset($obj->headers_list);
+}
