@@ -1,6 +1,123 @@
 <?php namespace srv; // vim: se fdm=marker:
 
+/**
+ * CORS，标注安全header
+ * 流量限制
+ * auth，token，session/cookie
+ * vary协商Accept
+ */
 class rest extends api{
+
+
+
+  /**
+   * @fixme rpc仅在swoole模式下请求GET或POST，直接输出响应，无需返回
+   * @todo 如何兼容rest，通常die掉了
+   * @todo 能否启用__call转换抛出异常？rest时返回501错误
+   */
+  final function __invoke():string{
+
+    //FIXME 大小写？
+    if(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
+      //TODO 执行之前，确保向swoole注入$_GET
+      return static::$method(...$this->query2parameters($method, $_GET));
+    else
+      throw new \BadMethodCallException('Not Implemented',501);
+
+  }
+
+
+  private function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
+    switch($type){
+      case null:
+      case 'string':
+        if(empty($value) && $allowsNull)
+          yield;
+        else
+          yield $value;
+        break;
+      case 'bool':
+          yield filter_var($value===''?:$value, FILTER_VALIDATE_BOOLEAN);
+        break;
+      case 'int':
+        if(is_numeric($value)){
+          if($value<PHP_INT_MIN || $value>PHP_INT_MAX)
+            throw new \RangeException($name.' Allow range from '.PHP_INT_MIN.' to '.PHP_INT_MAX,400);
+          else
+            yield $value;
+        }elseif(empty($value) && $allowsNull)
+          yield;
+        else
+          throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400);
+        break;
+      case 'float':
+        if(empty($value) && $allowsNull)
+          yield;
+        elseif(!is_numeric($value))
+          throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400);
+        else
+          yield $value;
+        break;
+      case 'DateTime':
+        try{
+          yield new \DateTime($value); //FIXME 语言特定的内置对象，不通用！
+        }catch(\Exception $e){
+          throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400,$e);
+        }
+        break;
+      case 'array':
+        yield (array)$value;
+        break;
+      default:
+        throw new \InvalidArgumentException('基类死规定，就一个str能怎么转换那么多种type',500);
+    }
+  }#}}}
+
+
+  /**
+   * @fixme rpc用不到参数
+   */
+  final private function query2parameters(string $method, array $args):\Generator{#{{{
+    //if(method_exists($this,$method))
+    foreach((new \ReflectionMethod($this,$method))->getParameters() as $param){
+      $name = strtolower($param->name);
+      if(isset($args[$name])){
+        [$type,$allowsNull] = [(string)$param->getType(), $param->allowsNull()];
+        if($param->isVariadic()){
+          if(is_array($args[$name]))
+            foreach($args[$name] as $v)
+              yield from $this->check($type, $v, $name, $allowsNull);
+          else//可变长参数，变通一下，允许不使用数组形式，而直接临时使用标量
+            yield from $this->check($type, $args[$name], $name, $allowsNull);
+        }else{//必然string
+          yield from $this->check($type, $args[$name], $name, $allowsNull);
+        }
+      }elseif($param->isOptional() && $param->isDefaultValueAvailable())
+        yield $param->getDefaultValue();
+      else
+        throw new \InvalidArgumentException("缺少必要的查询参数{$name}",400);
+    }
+  }#}}}
+
+
+
+  /**
+   * 收集谓词，为了向OPTIONS暴露方法，也可能用__debugInfo提取swagger
+   * @fixme protected是为了向父类的__debugInfo调用权限
+   */
+  final protected function method():array{
+    $arr = [];
+    foreach((new \ReflectionClass($this))->getMethods(\ReflectionMethod::IS_PUBLIC) as $m){
+      if(strpos($m->name,'__')!==0)
+        if($m->class===self::class){
+          if(ctype_upper($m->name))
+            $arr[$m->name] = $m;
+        }
+        elseif(ctype_print($m->name))
+          $arr[strtoupper($m->name)] = $m;
+    }
+    return $arr;
+  }
 
   final function OPTIONS($age=600):void{#{{{
 
@@ -23,7 +140,7 @@ class rest extends api{
   }#}}}
 
 
-  //FIXME
+  //FIXME 提前剥离payload，但不要204
   final function HEAD(){
     $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] = 'GET';
     return $this();
@@ -243,6 +360,15 @@ class rest extends api{
           //TODO 生成填充数据的sql
           break;
 
+        case 'application/x-msgpack':
+        case 'application/vnd.msgpack':
+        case 'application/msgpack':
+          if(false){
+            header("Content-Type: $item;charset=$charset");
+            return msgpack_serialize($data);
+          }
+          break;
+
 
         case '*/*':
         case 'application/json':
@@ -269,5 +395,36 @@ class rest extends api{
       return $data;//TODO 序列化
     }else throw new \Error('Not Accepted',406);
   }
+
+
+  final protected static function header(string $str):?string{
+    foreach(array_reverse(headers_list()) as $item){
+      [$k,$v] = explode(':',$item,2);
+      if(strcasecmp($str, $k)===0)
+        return trim($v);
+    }
+    return null;
+  }
+
+
+  //FIXME q乱序识别错误
+  final private static function q(string $str=''):array{#{{{
+    $result = $tmp = [];
+    foreach(explode(',',$str) as $item){
+      if(strpos($item,';')===false){
+        $tmp[] = $item;//暂存
+      }else{
+        $tmp[] = strstr($item,';',true);
+        $q = filter_var(explode('q=',$item)[1], FILTER_VALIDATE_FLOAT);
+        if($q!==false&&$q>0&&$q<=1)//合法float就存入最终结果，否则不存，反正最后要清空这一轮的暂存期
+          foreach($tmp as $v)
+            $result[$v] = $q;
+        $tmp = [];//无论如何，本轮结束清空暂存区
+      }
+    }
+    $result += array_fill_keys(array_filter(array_map('trim',$tmp)),0.5);
+    arsort($result);
+    return $result?:['*/*'=>0.5];
+  }#}}}
 
 }

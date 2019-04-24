@@ -15,39 +15,53 @@ class swoole extends api{
    */
   final function __construct(string $host, int $port){
     /**/
-    if(PHP_SAPI === 'cli'){
-      //TODO 启动swoole.start()
-      //FIXME 但是start之后，后续代码应该无法执行了
-      $srv = new \Swoole\Http\Server($host, $port);
-
-      $srv->on('request', function($request, $response){
-        $response->end(static::class);
-      });
-
-      $srv->on('start',[$this,'start']);
-      $srv->on('close',[$this,'close']);
-      $srv->on('finish',[$this,'finish']);
-      $srv->on('connect',[$this,'connect']);
-      $srv->on('receive',[$this,'receive']);
-      $srv->on('workerStart',[$this,'workerStart']);
-
-      $srv->on('shutdown',[$this,'__destruct']);
-
-      var_dump(swoole_get_local_ip());
-
-      //TODO start之前，welcome开场白致辞
+    if(PHP_SAPI === 'cli')
 
       try{
-        $srv->start();
+
+        //TODO 路由，将各自处理分布在各个实体文件里，便于模块化管理
+        //require 'dlsf.php';
+
+        //TODO 启动swoole.start()
+        //FIXME 但是start之后，后续代码应该无法执行了
+        $srv = new \Swoole\Http\Server($host, $port);
+
+        $srv->on('request', function(\Swoole\Http\Request $request, \Swoole\Http\Response $response){
+          var_dump($request->server['request_uri']);
+          var_dump($request->server['request_method']);
+          var_dump($request->server);
+          $response->header('Content-Type', 'text/html');
+          $response->end(static::class);
+        });
+
+        $srv->on('start',[$this,'start']);
+        $srv->on('close',[$this,'close']);
+        $srv->on('finish',[$this,'finish']);
+        $srv->on('connect',[$this,'connect']);
+        $srv->on('receive',[$this,'receive']);
+        $srv->on('workerStart',[$this,'workerStart']);
+
+        $srv->on('shutdown',[$this,'__destruct']);
+
+        var_dump(swoole_get_local_ip());
+
+        //TODO start之前，welcome开场白致辞
+
+        //FIXME 服务器关闭后，start返回false，并继续向下执行。所以die
+        //FIXME 启动失败也会返回false
+        $srv->start() || die;
+
       }catch(\Swoole\Exception $e){
-        var_dump($e);
+        //TODO console高亮
+        echo 'ERR: ', $e->getMessage(), PHP_EOL;
+        //var_dump($e);
       }
-    }
+
     /**/
   }
 
   function __destruct(){
-    var_dump($this);
+    //var_dump($this);
   }
 
 
@@ -59,7 +73,7 @@ class swoole extends api{
   }
 
   function workerStart(\Swoole\Server $server, int $workerId){
-    echo 'onWorkerStart:', PHP_EOL;
+    echo 'onWorkerStart:', $workerId, PHP_EOL;
   }
 
   //abstract function managerStart();
