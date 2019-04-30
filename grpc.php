@@ -7,7 +7,23 @@
 class grpc extends rpc{
 
   final function GET():string{
-    return 'class.proto';
+    return <<<proto
+      syntax = "proto3";
+
+      package ns;
+
+      option cc_generic_services = true;
+
+      message Msg {
+        string aaa = 1;
+        string bbb = 2;
+        string ccc = 3;
+      }
+
+      service srv {
+        rpc Echo(Msg) returns (Msg);
+      }
+proto;
   }
 
   final function POST():void{

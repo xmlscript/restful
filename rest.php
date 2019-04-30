@@ -8,96 +8,14 @@
  */
 class rest extends api{
 
-
-
-  /**
-   * @fixme rpc仅在swoole模式下请求GET或POST，直接输出响应，无需返回
-   * @todo 如何兼容rest，通常die掉了
-   * @todo 能否启用__call转换抛出异常？rest时返回501错误
-   */
-  final function __invoke():string{
-
-    //FIXME 大小写？
-    if(in_array($method=$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']??$_SERVER['REQUEST_METHOD']??null,array_keys($this->method()),true))
-      //TODO 执行之前，确保向swoole注入$_GET
-      return static::$method(...$this->query2parameters($method, $_GET));
-    else
-      throw new \BadMethodCallException('Not Implemented',501);
-
+  final function __toString():string{
+    try{
+      return $this->vary($this());
+    }catch(\Throwable $t){
+      //TODO http_response_code(500);
+      return $t->getMessage();
+    }
   }
-
-
-  private function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
-    switch($type){
-      case null:
-      case 'string':
-        if(empty($value) && $allowsNull)
-          yield;
-        else
-          yield $value;
-        break;
-      case 'bool':
-          yield filter_var($value===''?:$value, FILTER_VALIDATE_BOOLEAN);
-        break;
-      case 'int':
-        if(is_numeric($value)){
-          if($value<PHP_INT_MIN || $value>PHP_INT_MAX)
-            throw new \RangeException($name.' Allow range from '.PHP_INT_MIN.' to '.PHP_INT_MAX,400);
-          else
-            yield $value;
-        }elseif(empty($value) && $allowsNull)
-          yield;
-        else
-          throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400);
-        break;
-      case 'float':
-        if(empty($value) && $allowsNull)
-          yield;
-        elseif(!is_numeric($value))
-          throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400);
-        else
-          yield $value;
-        break;
-      case 'DateTime':
-        try{
-          yield new \DateTime($value); //FIXME 语言特定的内置对象，不通用！
-        }catch(\Exception $e){
-          throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400,$e);
-        }
-        break;
-      case 'array':
-        yield (array)$value;
-        break;
-      default:
-        throw new \InvalidArgumentException('基类死规定，就一个str能怎么转换那么多种type',500);
-    }
-  }#}}}
-
-
-  /**
-   * @fixme rpc用不到参数
-   */
-  final private function query2parameters(string $method, array $args):\Generator{#{{{
-    //if(method_exists($this,$method))
-    foreach((new \ReflectionMethod($this,$method))->getParameters() as $param){
-      $name = strtolower($param->name);
-      if(isset($args[$name])){
-        [$type,$allowsNull] = [(string)$param->getType(), $param->allowsNull()];
-        if($param->isVariadic()){
-          if(is_array($args[$name]))
-            foreach($args[$name] as $v)
-              yield from $this->check($type, $v, $name, $allowsNull);
-          else//可变长参数，变通一下，允许不使用数组形式，而直接临时使用标量
-            yield from $this->check($type, $args[$name], $name, $allowsNull);
-        }else{//必然string
-          yield from $this->check($type, $args[$name], $name, $allowsNull);
-        }
-      }elseif($param->isOptional() && $param->isDefaultValueAvailable())
-        yield $param->getDefaultValue();
-      else
-        throw new \InvalidArgumentException("缺少必要的查询参数{$name}",400);
-    }
-  }#}}}
 
 
 
@@ -206,31 +124,6 @@ class rest extends api{
   }#}}}
 
 
-  final function __toString():string{
-    try{
-      return $payload = $this->vary($this());
-    }catch(\Throwable $t){
-      ob_get_length() and ob_clean(); //FIXME 测试OB未启用时的情况
-
-      //TODO 建议开发者抛出统一编写的业务异常，内置硬编码message和code
-
-      if(http_response_code()===200){
-        $code = $e->getCode();
-        http_response_code($code>=400&&$code<600?$code:500);
-      }
-
-      header_remove('Content-Type');
-      return $payload = $this->vary([
-        'code' => $e->getCode(),
-        'reason' => $e->getMessage(),
-      ]);
-    }
-
-    finally{
-      isset($payload) || http_response_code()===200 && http_response_code(204);
-    }
-
-  }
 
 
   final private function vary($data):string{

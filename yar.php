@@ -3,12 +3,12 @@
 class yar extends rpc{
 
   final function GET():string{
-    return 'IDL.html';
+    header('Content-Type: text/plain;charset=utf-8');
+    return preg_replace(['/\n\s+@@ .*\n/','/\n\s{3,}\*/'],['x',"\n     *"],new \ReflectionClass(static::class));
   }
 
   final function POST():void{
     (new \Yar_Server($this))->handle();
-    //die;//FIXME 后续的请求头控制一律忽略掉了
   }
 
 }
