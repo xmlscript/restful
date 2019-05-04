@@ -81,6 +81,7 @@ final class swoole{
             case '/':
             default:
               $response->write('default');
+              $response->write('rawContent: '.$request->rawContent());
               break;
           }
 

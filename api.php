@@ -12,12 +12,8 @@ abstract class api{
 
 
   /**
-   * @param $_SERVER['REQUEST_METHD']
+   * @param $_SERVER['REQUEST_METHOD']
    * @param $_GET
-   *
-   * @fixme rpc仅在swoole模式下请求GET或POST，直接输出响应，无需返回
-   * @todo 如何兼容rest，通常die掉了
-   * @todo 此时判断cli，启用swoole
    * @fixme 警惕恶意构造非法的请求方法！对外输出一律使用public
    */
   final function __invoke(){

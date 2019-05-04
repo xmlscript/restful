@@ -32,5 +32,4 @@ abstract class rpc extends api{
 
   abstract function POST():void;
 
-
 }
