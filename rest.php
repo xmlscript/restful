@@ -193,9 +193,8 @@ class rest extends api{
 
           if(is_resource($data) && get_resource_type($data)==='gd'){
 
-            imagecolorstotal($data) || imagecolorallocate($data,222,222,222);
-
             if(!imageistruecolor($data)){//因为webp必须由truecolor创建
+              imagecolorstotal($data) || imagecolorallocate($data,222,222,222);
               $tmp = imagecreatetruecolor(imagesx($data),imagesy($data));
               imagecopy($tmp,$data,0,0,0,0,imagesx($data),imagesy($data));
               imagedestroy($data);
