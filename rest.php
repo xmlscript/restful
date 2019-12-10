@@ -192,10 +192,20 @@ class rest extends api{
           }
 
           if(is_resource($data) && get_resource_type($data)==='gd'){
+
+            imagecolorstotal($data) || imagecolorallocate($data,222,222,222);
+
+            if(!imageistruecolor($data)){//因为webp必须由truecolor创建
+              $tmp = imagecreatetruecolor(imagesx($data),imagesy($data));
+              imagecopy($tmp,$data,0,0,0,0,imagesx($data),imagesy($data));
+              imagedestroy($data);
+              $data = $tmp;
+              $tmp = null;
+            }
+
             $fmt = str_replace('*','png',substr($item,6));
             self::header('Content-Type') || header("Content-Type: image/$fmt");
             ob_start();
-            imagecolorstotal($data) || imagecolorallocate($data,222,222,222);
             ('image'.$fmt)($data); //能否预输出到一个stream
             $buf = ob_get_contents();
             ob_end_clean();
