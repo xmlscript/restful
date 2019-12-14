@@ -70,7 +70,7 @@ abstract class api{
   }#}}}
 
   final private function query2parameters(string $method, array $args):\Generator{#{{{
-    if($method && $args && method_exists($this,$method))
+    //if($method && $args && method_exists($this,$method)) //FIXME 如果没有传入该当如何？
     foreach((new \ReflectionMethod($this,$method))->getParameters() as $param){
       $name = strtolower($param->name);
       if(isset($args[$name])){
