@@ -12,8 +12,8 @@ class rest extends api{
     try{
       return $this->vary($this());
     }catch(\Throwable $t){
-      //TODO http_response_code(500);
-      return $t->getMessage();
+      http_response_code($t->getCode());
+      return $this->vary(['code'=>$t->getCode(),'reason'=>$t->getMessage()]);
     }
   }
 
@@ -62,11 +62,6 @@ class rest extends api{
   final function HEAD(){
     $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] = 'GET';
     return $this();
-  }
-
-  //TODO 阻止返回值！但是子类居然允许重写返回值！
-  function PUT():void{
-    throw new \Error('Not Implemented',503);
   }
 
 
