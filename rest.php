@@ -12,8 +12,8 @@ class rest extends api{
     try{
       return $this->vary($this());
     }catch(\Throwable $t){
-      //TODO http_response_code(500);
-      return $t->getMessage();
+      http_response_code($t->getCode());
+      return $this->vary(['code'=>$t->getCode(),'reason'=>$t->getMessage()]);
     }
   }
 
