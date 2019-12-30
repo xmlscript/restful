@@ -64,6 +64,11 @@ class rest extends api{
     return $this();
   }
 
+  //TODO 阻止返回值！但是子类居然允许重写返回值！
+  function PUT():void{
+    throw new \Error('Not Implemented',503);
+  }
+
 
 
 
