@@ -6,11 +6,8 @@ abstract class api{
 
   abstract protected function method():array;
 
-
   /**
-   * @param $_SERVER['REQUEST_METHOD']
    * @param $_GET
-   * @fixme 警惕恶意构造非法的请求方法！对外输出一律使用public
    */
   final function __invoke(string $verb){
     switch(strtoupper($verb)){
@@ -36,7 +33,7 @@ abstract class api{
     case 'TRACE':
     case 'CONNECT':
     default:
-      throw new \BadMethodCallException("Not Implemented",501);
+      throw new \BadMethodCallException('Not Implemented',501);
     }
   }
 
@@ -72,15 +69,23 @@ abstract class api{
         else
           yield $value;
         break;
-      case 'DateTime':
+      case 'array':
+        yield (array)$value;
+        break;
+      case \DateTime::class:
         try{
-          yield new \DateTime($value); //FIXME 语言特定的内置对象，不通用！
+          yield new \DateTime($value);
         }catch(\Exception $e){
           throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400,$e);
         }
         break;
-      case 'array':
-        yield (array)$value;
+      case \DateTimeImmutable::class:
+      case \DateTimeInterface::class:
+        try{
+          yield new \DateTimeImmutable($value); //FIXME 如果引用 \DateTimeImmutable &$date，怎么处理？
+        }catch(\Exception $e){
+          throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400,$e);
+        }
         break;
       default:
         throw new \InvalidArgumentException('基类死规定，就一个str能怎么转换那么多种type',500);

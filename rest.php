@@ -8,22 +8,13 @@
  */
 class rest extends api{
 
-  const METHOD = [
-    'GET',
-    'PUT',
-    'PATCH',
-    'POST',
-    'DELETE',
-    'OPTIONS',
-    'HEAD',
-  ];
-
   final function __toString():string{
     try{
-      return $this->vary($this($_SERVER['REQUEST_METHOD']));
+      return self::vary($this($_SERVER['REQUEST_METHOD']));
     }catch(\Throwable $t){
-      http_response_code($t->getCode());
-      return $this->vary(['code'=>$t->getCode(),'reason'=>$t->getMessage()]);
+      $errno = $t->getCode()?:500;
+      http_response_code($errno);
+      return self::vary(['code'=>$errno,'reason'=>$t->getMessage()]);
     }
   }
 
@@ -34,12 +25,12 @@ class rest extends api{
    * @fixme protected是为了向父类的__debugInfo调用权限
    */
   final protected function method():array{
-    return array_filter(self::METHOD,fn($m) => method_exists(static::class,$m));
+    return array_filter(['GET','OPTIONS','POST','PUT','PATCH','DELETE','HEAD'],fn($m) => method_exists(static::class,$m));
   }
 
   final function OPTIONS($age=600):void{#{{{
 
-    $methods = implode(', ',array_keys($this->method()));
+    $methods = implode(', ',$this->method());
 
     if(
       isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']) &&
@@ -61,6 +52,15 @@ class rest extends api{
   //FIXME 不要204
   final function HEAD():void{
     $this('GET');
+  }
+
+  //禁止开发者实现，但是web容器应该不会到这里吧？
+  final function TRACE():void{
+
+  }
+
+  final function CONNECT():void{
+
   }
 
 
@@ -125,7 +125,7 @@ class rest extends api{
 
 
 
-  final private function vary($data):string{
+  final static function vary($data):string{
 
     if(is_null($data)) return '';
 
@@ -155,7 +155,7 @@ class rest extends api{
       }
     elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
       //FIXME XML格式太丰富了，既然开发者耗费精力准备好了XML对象，不如就直接输入
-      header("Content-Type: application/xml;charset=$charset");
+      self::header('Content-Type') || header("Content-Type: application/xml;charset=$charset");
       return $data->saveXML();
     }elseif($data instanceof \Iterator){
       //FIXME 白白浪费了yield性能
