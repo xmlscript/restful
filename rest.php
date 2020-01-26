@@ -8,9 +8,19 @@
  */
 class rest extends api{
 
+  const METHOD = [
+    'GET',
+    'PUT',
+    'PATCH',
+    'POST',
+    'DELETE',
+    'OPTIONS',
+    'HEAD',
+  ];
+
   final function __toString():string{
     try{
-      return $this->vary($this());
+      return $this->vary($this($_SERVER['REQUEST_METHOD']));
     }catch(\Throwable $t){
       http_response_code($t->getCode());
       return $this->vary(['code'=>$t->getCode(),'reason'=>$t->getMessage()]);
@@ -24,17 +34,7 @@ class rest extends api{
    * @fixme protected是为了向父类的__debugInfo调用权限
    */
   final protected function method():array{
-    $arr = [];
-    foreach((new \ReflectionClass($this))->getMethods(\ReflectionMethod::IS_PUBLIC) as $m){
-      if(strpos($m->name,'__')!==0)
-        if($m->class===self::class){
-          if(ctype_upper($m->name))
-            $arr[$m->name] = $m;
-        }
-        elseif(ctype_print($m->name))
-          $arr[strtoupper($m->name)] = $m;
-    }
-    return $arr;
+    return array_filter(self::METHOD,fn($m) => method_exists(static::class,$m));
   }
 
   final function OPTIONS($age=600):void{#{{{
@@ -58,10 +58,9 @@ class rest extends api{
   }#}}}
 
 
-  //FIXME 提前剥离payload，但不要204
-  final function HEAD(){
-    $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] = 'GET';
-    return $this();
+  //FIXME 不要204
+  final function HEAD():void{
+    $this('GET');
   }
 
 
@@ -154,8 +153,6 @@ class rest extends api{
         default:
           throw new \UnexpectedValueException('Unexpected Value',500);
       }
-    elseif($data instanceof \DateTime)
-      $data = $data->format(DATE_ISO8601); //js的date方法只认ISO8601或RFC2822
     elseif($data instanceof \SimpleXMLElement || $data instanceof \DOMDocument){
       //FIXME XML格式太丰富了，既然开发者耗费精力准备好了XML对象，不如就直接输入
       header("Content-Type: application/xml;charset=$charset");
@@ -183,7 +180,8 @@ class rest extends api{
             //TODO
           }
         case 'image/webp':
-          if(imagetypes() & IMG_WEBP){
+          /**/
+          if(is_resource($data) && get_resource_type($data)==='gd' && imagetypes() & IMG_WEBP){
             if(!imageistruecolor($data)){//因为webp必须由truecolor创建
               $tmp = imagecreatetruecolor(imagesx($data),imagesy($data));
               imagecopy($tmp,$data,0,0,0,0,imagesx($data),imagesy($data));
@@ -192,6 +190,7 @@ class rest extends api{
               $tmp = null;
             }
           }
+          /**/
         case 'image/jpeg':
           if(imagetypes() & IMG_JPEG){
             //TODO
@@ -202,12 +201,12 @@ class rest extends api{
 
             $fmt = str_replace('*','png',substr($item,6));
             self::header('Content-Type') || header("Content-Type: image/$fmt");
-            ob_start();
+            //ob_start();
             imagecolorstotal($data) || imagecolorallocate($data,222,222,222);
             ('image'.$fmt)($data); //能否预输出到一个stream
-            $buf = ob_get_contents();
-            ob_end_clean();
-            return $buf;
+            //$buf = ob_get_contents();
+            //ob_end_clean();
+            //return $buf;
           }else break;
 
 
@@ -247,11 +246,7 @@ class rest extends api{
 
         case 'text/*':
         case 'text/csv':
-          if(is_array($data)){
-            header("Content-Type: text/csv;charset=$charset");
-            //TODO 必须是整齐的二维数组，用tab分割
-            return 'TODO csv';
-          }elseif($data instanceof \PDOStatement){
+          if($data instanceof \PDOStatement){
             header("Content-Type: text/csv;charset=$charset");
             return '$data->fetchAll()';
           }//故意没有break
@@ -274,6 +269,7 @@ class rest extends api{
         case '*/*':
         case 'application/json':
           if($data instanceof \Google\Protobuf\Message){
+            //FIXME 暴殄天物，好端端的二进制，硬生生拆散成string
             header("Content-Type: application/json;charset=$charset");
             return $data->toJsonString();
           }elseif(is_string($data)&&strlen($data)>1&&$data[0]==='"'&&$data[-1]==='"'&&is_string(json_decode($data,false,1))){
@@ -298,6 +294,7 @@ class rest extends api{
   }
 
 
+  //FIXME 不要考虑Swoole
   final protected static function header(string $str):?string{
     foreach(array_reverse(headers_list()) as $item){
       [$k,$v] = explode(':',$item,2);

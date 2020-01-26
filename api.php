@@ -6,20 +6,38 @@ abstract class api{
 
   abstract protected function method():array;
 
-  final function __call(string $fn, array $args):void{
-    throw new \BadMethodCallException("Not Implemented",501);
-  }
-
 
   /**
    * @param $_SERVER['REQUEST_METHOD']
    * @param $_GET
    * @fixme 警惕恶意构造非法的请求方法！对外输出一律使用public
    */
-  final function __invoke(){
-    return static::{$_SERVER['REQUEST_METHOD']??''}(
-      ...$this->query2parameters($_SERVER['REQUEST_METHOD']??'', $_GET)
-    );
+  final function __invoke(string $verb){
+    switch(strtoupper($verb)){
+    case 'HEAD':
+    case 'GET':
+      //TODO 此处立即vary，并设置Content-Length，以避免tuncked
+      return $this->GET(...$this->query2parameters('GET', $_GET));
+
+    case 'OPTIONS':
+      return $this->OPTIONS();
+
+    case 'PUT':
+    case 'PATCH':
+    case 'POST':
+    case 'DELETE':
+      if($this->{$verb}(...$this->query2parameters($verb, $_GET))){
+        http_response_code(204);
+        header('Content-Location: '.$_SERVER['REQUEST_URI']);
+      }else
+        http_response_code(202);
+      return;
+
+    case 'TRACE':
+    case 'CONNECT':
+    default:
+      throw new \BadMethodCallException("Not Implemented",501);
+    }
   }
 
 
