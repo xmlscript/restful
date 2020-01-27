@@ -2,38 +2,49 @@
 
 abstract class api{
 
-  abstract function __toString():string;
-
   abstract protected function method():array;
 
+  final function __call($verb,$arg):void{
+    if($verb!=='GET') throw new \BadMethodCallException('Not Implemented',501);
+  }
+
+
   /**
-   * @param $_GET
+   * @param $GET
    */
-  final function __invoke(string $verb){
-    switch(strtoupper($verb)){
-    case 'HEAD':
-    case 'GET':
-      //TODO 此处立即vary，并设置Content-Length，以避免tuncked
-      return $this->GET(...$this->query2parameters('GET', $_GET));
+  final function __invoke(string $verb, array $SERVER, array $GET=[]):string{
 
-    case 'OPTIONS':
-      return $this->OPTIONS();
+    try{
+      switch(strtoupper($verb)){
 
-    case 'PUT':
-    case 'PATCH':
-    case 'POST':
-    case 'DELETE':
-      if($this->{$verb}(...$this->query2parameters($verb, $_GET))){
-        http_response_code(204);
-        header('Content-Location: '.$_SERVER['REQUEST_URI']);
-      }else
-        http_response_code(202);
-      return;
+      case 'GET':
+        //TODO 此处立即vary，并设置Content-Length，以避免tuncked
+        $str = $this->vary($this->GET(...$this->query2parameters('GET', $GET)), $SERVER, $GET);
+        header('Content-Length: '.strlen($str));
+        return $str;
 
-    case 'TRACE':
-    case 'CONNECT':
-    default:
-      throw new \BadMethodCallException('Not Implemented',501);
+      case 'OPTIONS':
+        return $this->OPTIONS($SERVER);
+
+      case 'PUT':
+      case 'PATCH':
+      case 'POST':
+      case 'DELETE':
+        http_response_code(static::$verb(...$this->query2parameters($verb, $GET))?204:202);
+        return '';
+
+      case 'HEAD':
+      case 'TRACE':
+      case 'CONNECT':
+        return '';
+
+      default:
+        throw new \BadMethodCallException('Not Implemented',501);
+      }
+    }catch(\Throwable $t){
+      $errno = $t->getCode()?:500;
+      http_response_code($errno);
+      return $this->vary(['code'=>$errno,'reason'=>$errno?$t->getMessage():'Internal Server Error'], $SERVER, $GET);
     }
   }
 
@@ -93,7 +104,7 @@ abstract class api{
   }#}}}
 
   final private function query2parameters(string $method, array $args):\Generator{#{{{
-    if($method && $args && method_exists($this,$method))
+    if($method && method_exists($this,$method))
     foreach((new \ReflectionMethod($this,$method))->getParameters() as $param){
       $name = strtolower($param->name);
       if(isset($args[$name])){

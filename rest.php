@@ -8,61 +8,33 @@
  */
 class rest extends api{
 
-  final function __toString():string{
-    try{
-      return self::vary($this($_SERVER['REQUEST_METHOD']));
-    }catch(\Throwable $t){
-      $errno = $t->getCode()?:500;
-      http_response_code($errno);
-      return self::vary(['code'=>$errno,'reason'=>$t->getMessage()]);
-    }
-  }
-
-
 
   /**
    * 收集谓词，为了向OPTIONS暴露方法，也可能用__debugInfo提取swagger
    * @fixme protected是为了向父类的__debugInfo调用权限
    */
   final protected function method():array{
-    return array_filter(['GET','OPTIONS','POST','PUT','PATCH','DELETE','HEAD'],fn($m) => method_exists(static::class,$m));
+    return array_filter(['GET','OPTIONS','POST','PUT','PATCH','DELETE'],fn($m) => method_exists(static::class,$m));
   }
 
-  final function OPTIONS($age=600):void{#{{{
-
+  final function OPTIONS(array &$SERVER, $age=600):string{#{{{
     $methods = implode(', ',$this->method());
 
     if(
-      isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']) &&
-      method_exists(static::class,$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])
+      isset($SERVER['HTTP_ORIGIN'],$SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']) &&
+      method_exists(static::class,$SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])
     ){
 
       header('Access-Control-Max-Age: '.is_numeric($age)&&settype($age,'int')?$age:600);
       header("Access-Control-Allow-Methods: $methods");
 
-      if(isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']))
-        header('Access-Control-Allow-Headers: '.$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']);
+      if(isset($SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']))
+        header('Access-Control-Allow-Headers: '.$SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']);
 
     }else
       header("Allow: $methods");
-
+    return '';
   }#}}}
-
-
-  //FIXME 不要204
-  final function HEAD():void{
-    $this('GET');
-  }
-
-  //禁止开发者实现，但是web容器应该不会到这里吧？
-  final function TRACE():void{
-
-  }
-
-  final function CONNECT():void{
-
-  }
-
 
 
 
@@ -125,12 +97,12 @@ class rest extends api{
 
 
 
-  final static function vary($data):string{
+  final static function vary($data, array &$SERVER, array &$GET):string{
 
     if(is_null($data)) return '';
 
     $content_type = self::header('Content-Type');
-    $ACCEPT = explode(';',$content_type,2)[0]?:$_SERVER['HTTP_ACCEPT']??ini_get('default_mimetype').',*/*;q=0.1';
+    $ACCEPT = explode(';',$content_type,2)[0]?:$SERVER['HTTP_ACCEPT']??ini_get('default_mimetype').',*/*;q=0.1';
     $charset = substr(stristr($content_type,'charset='),8)?:ini_get('default_charset')?:'UTF-8';
 
     if(is_resource($data))
@@ -198,7 +170,6 @@ class rest extends api{
 
           if(is_resource($data) && get_resource_type($data)==='gd'){
 
-
             $fmt = str_replace('*','png',substr($item,6));
             self::header('Content-Type') || header("Content-Type: image/$fmt");
             //ob_start();
@@ -220,10 +191,10 @@ class rest extends api{
             $content=json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
 
           $id = crc32($content);
-          $retry = $_GET['retry']&&is_numeric($_GET['retry'])&&settype($_GET['retry'])?(int)$_GET['retry']:3000;
+          $retry = $GET['retry']&&is_numeric($GET['retry'])&&settype($GET['retry'])?(int)$GET['retry']:3000;
 
-          if(isset($_SERVER['HTTP_LAST_EVENT_ID']) && $_SERVER['HTTP_LAST_EVENT_ID']==$id)//把ID当作ETag来使用
-            return 'retry: '.++$_SERVER['HTTP_LAST_EVENT_ID']."\n\n";//TODO 按需要自动延长retry时间
+          if(isset($SERVER['HTTP_LAST_EVENT_ID']) && $SERVER['HTTP_LAST_EVENT_ID']==$id)//把ID当作ETag来使用
+            return 'retry: '.++$SERVER['HTTP_LAST_EVENT_ID']."\n\n";//TODO 按需要自动延长retry时间
           else
             return "id: $id\ndata: $content\nretry: $retry\n\n";
 
