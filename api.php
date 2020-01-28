@@ -10,27 +10,28 @@ abstract class api{
 
 
   /**
-   * @param $GET
+   * @param $_GET
    */
-  final function __invoke(string $verb, array $SERVER, array $GET=[]):string{
+  final function __invoke(string $verb):string{
 
     try{
+      header('Vary: Accept');
       switch(strtoupper($verb)){
 
       case 'GET':
         //TODO 此处立即vary，并设置Content-Length，以避免tuncked
-        $str = $this->vary($this->GET(...$this->query2parameters('GET', $GET)), $SERVER, $GET);
+        $str = $this->vary($this->GET(...$this->query2parameters('GET', $_GET)));
         header('Content-Length: '.strlen($str));
         return $str;
 
       case 'OPTIONS':
-        return $this->OPTIONS($SERVER);
+        return $this->OPTIONS();
 
       case 'PUT':
       case 'PATCH':
       case 'POST':
       case 'DELETE':
-        http_response_code(static::$verb(...$this->query2parameters($verb, $GET))?204:202);
+        http_response_code(static::$verb(...$this->query2parameters($verb, $_GET))?204:202);
         return '';
 
       case 'HEAD':
@@ -44,7 +45,7 @@ abstract class api{
     }catch(\Throwable $t){
       $errno = $t->getCode()?:500;
       http_response_code($errno);
-      return $this->vary(['code'=>$errno,'reason'=>$errno?$t->getMessage():'Internal Server Error'], $SERVER, $GET);
+      return $this->vary(['code'=>$errno,'reason'=>$errno?$t->getMessage():'Internal Server Error']);
     }
   }
 
