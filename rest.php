@@ -8,6 +8,9 @@
  */
 class rest extends api{
 
+  function __toString(){
+    return $this();
+  }
 
   /**
    * 收集谓词，为了向OPTIONS暴露方法，也可能用__debugInfo提取swagger
@@ -104,6 +107,8 @@ class rest extends api{
     $content_type = self::header('Content-Type');
     $ACCEPT = explode(';',$content_type,2)[0]?:$_SERVER['HTTP_ACCEPT']??ini_get('default_mimetype').',*/*;q=0.1';
     $charset = substr(stristr($content_type,'charset='),8)?:ini_get('default_charset')?:'UTF-8';
+
+    header('Vary: Accept');
 
     if(is_resource($data))
       switch(get_resource_type($data)){

@@ -5,24 +5,25 @@ abstract class api{
   abstract protected function method():array;
 
   final function __call($verb,$arg):void{
-    if($verb!=='GET') throw new \BadMethodCallException('Not Implemented',501);
+    if($verb!=='GET') throw new \BadMethodCallException('',501);
   }
 
 
   /**
    * @param $_GET
    */
-  final function __invoke(string $verb):string{
+  final function __invoke():string{
+
 
     try{
-      header('Vary: Accept');
-      switch(strtoupper($verb)){
+
+      ob_start();
+
+      if(isset($_SERVER['REQUEST_METHOD']))
+      switch($_SERVER['REQUEST_METHOD']){
 
       case 'GET':
-        //TODO 此处立即vary，并设置Content-Length，以避免tuncked
-        $str = $this->vary($this->GET(...$this->query2parameters('GET', $_GET)));
-        header('Content-Length: '.strlen($str));
-        return $str;
+        return $this->vary($this->GET(...$this->query2parameters('GET', $_GET)));
 
       case 'OPTIONS':
         return $this->OPTIONS();
@@ -31,21 +32,18 @@ abstract class api{
       case 'PATCH':
       case 'POST':
       case 'DELETE':
-        http_response_code(static::$verb(...$this->query2parameters($verb, $_GET))?204:202);
-        return '';
+        http_response_code(static::{$_SERVER['REQUEST_METHOD']}(...$this->query2parameters($_SERVER['REQUEST_METHOD'], $_GET))?204:202);
 
       case 'HEAD':
       case 'TRACE':
       case 'CONNECT':
         return '';
-
-      default:
-        throw new \BadMethodCallException('Not Implemented',501);
       }
+      throw new \BadMethodCallException('',501);
+
     }catch(\Throwable $t){
-      $errno = $t->getCode()?:500;
-      http_response_code($errno);
-      return $this->vary(['code'=>$errno,'reason'=>$errno?$t->getMessage():'Internal Server Error']);
+      http_response_code($t->getCode()?:500);
+      return $t->getCode()&&$t->getMessage()?$this->vary(['code'=>$t->getCode(),'reason'=>$t->getMessage()]):'';
     }
   }
 
