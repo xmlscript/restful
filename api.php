@@ -33,6 +33,7 @@ abstract class api{
         $ret = static::{$verb}(...$this->query2parameters($verb, $_GET));
         if(ob_get_length()) throw new \Error('方法内部不要echo',500);
         http_response_code($ret?204:202);
+        return '';
 
       case 'TRACE':
       case 'CONNECT':
