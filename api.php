@@ -14,16 +14,15 @@ abstract class api{
    */
   final function __invoke():string{
 
-
     try{
 
       ob_start();
-
-      if(isset($_SERVER['REQUEST_METHOD']))
-      switch($_SERVER['REQUEST_METHOD']){
+      switch($_SERVER['REQUEST_METHOD']??''){
 
       case 'GET':
-        return $this->vary($this->GET(...$this->query2parameters('GET', $_GET)));
+        $ret = $this->vary(static::GET(...$this->query2parameters('GET', $_GET)));
+        if(ob_get_length()) throw new \Error('方法内部不要echo',500);
+        return $ret;
 
       case 'OPTIONS':
         return $this->OPTIONS();
@@ -32,18 +31,24 @@ abstract class api{
       case 'PATCH':
       case 'POST':
       case 'DELETE':
-        http_response_code(static::{$_SERVER['REQUEST_METHOD']}(...$this->query2parameters($_SERVER['REQUEST_METHOD'], $_GET))?204:202);
+        $ret = static::{$_SERVER['REQUEST_METHOD']}(...$this->query2parameters($_SERVER['REQUEST_METHOD'], $_GET));
+        if(ob_get_length()) throw new \Error('方法内部不要echo',500);
+        http_response_code($ret?204:202);
 
       case 'HEAD':
       case 'TRACE':
       case 'CONNECT':
         return '';
+
+      default:
+        throw new \BadMethodCallException('',501);
       }
-      throw new \BadMethodCallException('',501);
 
     }catch(\Throwable $t){
       http_response_code($t->getCode()?:500);
       return $t->getCode()&&$t->getMessage()?$this->vary(['code'=>$t->getCode(),'reason'=>$t->getMessage()]):'';
+    }finally{
+      ob_end_clean();
     }
   }
 

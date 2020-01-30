@@ -9,7 +9,9 @@
 class rest extends api{
 
   function __toString(){
-    return $this();
+    $ret = $this();
+    header('Content-Length: '.strlen($ret));
+    return $ret;
   }
 
   /**
