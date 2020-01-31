@@ -8,42 +8,36 @@ abstract class api{
     if($verb!=='GET') throw new \BadMethodCallException('Not Implemented',501);
   }
 
-
   final function __invoke(string $verb):string{
-
     try{
-
       ob_start();
       switch($verb){
-
       case 'HEAD':
       case 'GET':
         $ret = $this->vary(static::GET(...$this->query2parameters('GET', $_GET)));
-        if(ob_get_length()) throw new \Error('方法内部不要echo',500);
+        if(ob_get_length()) throw new \Error('Internal Server Error',-1);
         header('Content-Length: '.strlen($ret));
         return $ret;
-
       case 'OPTIONS':
         return $this->OPTIONS();
-
       case 'PUT':
       case 'PATCH':
       case 'POST':
       case 'DELETE':
         $ret = static::{$verb}(...$this->query2parameters($verb, $_GET));
-        if(ob_get_length()) throw new \Error('方法内部不要echo',500);
+        if(ob_get_length()) throw new \Error('Internal Server Error',-1);
         http_response_code($ret?204:202);
         return '';
-
       case 'TRACE':
       case 'CONNECT':
       default:
         throw new \BadMethodCallException('Not Implemented',501);
       }
-
     }catch(\Throwable $t){
-      http_response_code($t->getCode()?:500);
-      $ret = $t->getCode()&&$t->getMessage()?$this->vary(['code'=>$t->getCode(),'reason'=>$t->getMessage()]):'Internal Server Error';
+      $code = $t->getCode()?:500;
+      $reason = $t->getCode()?$t->getMessage():'Internal Server Error';
+      http_response_code($code);
+      $ret = $this->vary(['code'=>$code,'reason'=>$reason]);
       header('Content-Length: '.strlen($ret));
       return $ret;
     }finally{
