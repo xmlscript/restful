@@ -33,11 +33,24 @@ abstract class api{
       default:
         throw new \BadMethodCallException('Not Implemented',501);
       }
-    }catch(\Throwable $t){
-      $code = $t->getCode()?:500;
-      $reason = $t->getCode()?$t->getMessage():'Internal Server Error';
-      http_response_code($code);
-      $ret = $this->vary(['code'=>$code,'reason'=>$reason]);
+    }catch(\Throwable $t){ //要求throw new Error('10086 业务错误码', 401);
+
+      http_response_code(max(-1,$t->getCode())?:500);//FIXME -11将输出65525，但httpie不支持-11
+
+      if($t->getCode() === 0){
+        $code = 0;
+        $reason = 'Internal Server Error';
+      }else{
+        $msg = $t->getMessage();
+        $code = (float)$msg;//FIXME 为避免解析错误，要忠于原始字面量类型，int或float
+        $reason = strpos($msg,(string)$code)===0?ltrim(substr($msg,strlen($code))):$msg;
+      }
+
+      $ret = $this->vary([
+        'code'=>$code,
+        'reason'=>$reason,
+      ]);
+
       header('Content-Length: '.strlen($ret));
       return $ret;
     }finally{
