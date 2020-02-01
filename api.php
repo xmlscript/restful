@@ -5,7 +5,8 @@ abstract class api{
   abstract protected function method():array;
 
   final function __call($verb,$arg):void{
-    if($verb!=='GET') throw new \BadMethodCallException('Not Implemented',501);
+    if(strcasecmp($verb,'GET') && strcasecmp($verb,'HEAD'))
+    throw new \BadMethodCallException('Not Implemented',501);
   }
 
   final function __invoke(string $verb):string{
@@ -15,7 +16,7 @@ abstract class api{
       case 'HEAD':
       case 'GET':
         $ret = $this->vary(static::GET(...$this->query2parameters('GET', $_GET)));
-        if(ob_get_length()) throw new \Error('Internal Server Error',-1);
+        if(ob_get_length()) throw new \Error('Internal Server Error',500);
         header('Content-Length: '.strlen($ret));
         return $ret;
       case 'OPTIONS':
@@ -25,7 +26,7 @@ abstract class api{
       case 'POST':
       case 'DELETE':
         $ret = static::{$verb}(...$this->query2parameters($verb, $_GET));
-        if(ob_get_length()) throw new \Error('Internal Server Error',-1);
+        if(ob_get_length()) throw new \Error('Internal Server Error',500);
         http_response_code($ret?204:202);
         return '';
       case 'TRACE':
@@ -40,15 +41,15 @@ abstract class api{
       if($t->getCode() === 0){
         $code = 0;
         $reason = 'Internal Server Error';
-      }else{
-        $msg = $t->getMessage();
-        $code = (float)$msg;//FIXME 为避免解析错误，要忠于原始字面量类型，int或float
-        $reason = strpos($msg,(string)$code)===0?ltrim(substr($msg,strlen($code))):$msg;
+      }elseif(!sscanf($t->getMessage(),'%e%[^$]',$code,$reason)){
+        $code = 0;
+        $reason = trim($t->getMessage());
       }
 
       $ret = $this->vary([
-        'code'=>$code,
-        'reason'=>$reason,
+        'code'=>(int)$code===(float)$code?(int)$code:(float)$code,
+        'reason'=>(string)$reason,
+        'msg'=>$t->getMessage(),
       ]);
 
       header('Content-Length: '.strlen($ret));
