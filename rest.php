@@ -97,45 +97,6 @@ class rest extends api{
   }#}}}
 
 
-
-  //TODO 所有header都推迟到__toString里执行？
-  final private function xxx($payload):void{#{{{
-    if(empty($payload) && http_response_code()===200){
-      http_response_code(204);
-    }
-  }#}}}
-
-
-  final private function etag(string $payload):void{#{{{
-    if(
-      isset($payload) &&
-      !headers_sent() &&
-      !in_array(http_response_code(),[304,412,204,206,416])
-    ){
-
-      $etag = '"'.crc32(ob_get_contents().join(headers_list()).$payload).'"';//算法仅此一处
-
-      $comp = function(string $etag, ?string $IF, bool $W=true):bool{
-        return $IF && in_array($etag, array_map(function($v) use ($W){
-          return ltrim($v,' '.$W?'W/':'');
-        },explode(',',$IF)));
-      };
-
-      if(
-        isset($_SERVER['HTTP_IF_NONE_MATCH']) &&
-        $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH'])
-      ){
-        http_response_code(304);
-      }else
-        header("ETag: $etag");
-
-    }
-
-  }#}}}
-
-
-
-
   final static function vary($data):string{
 
     if(is_null($data)) return '';

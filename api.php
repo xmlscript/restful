@@ -18,9 +18,13 @@ abstract class api{
         $ret = $this->vary(static::GET(...$this->query2parameters('GET', $_GET)));
         if(ob_get_length()) throw new \Error('Internal Server Error',500);
         header('Content-Length: '.strlen($ret));
+        if(empty($ret) && http_response_code()===200) http_response_code(204);
+        $this->etag($ret);
         return $ret;
+
       case 'OPTIONS':
         return $this->OPTIONS();
+
       case 'PUT':
       case 'PATCH':
       case 'POST':
@@ -29,9 +33,14 @@ abstract class api{
         if(ob_get_length()) throw new \Error('Internal Server Error',500);
         http_response_code($ret?203:202);
         return '';
+
       case 'TRACE':
       case 'CONNECT':
+        //FIXME 不要干扰web容器自身的实现
+
       default:
+        //FIXME 要允许public自定义方法，但防止xss
+        //FIXME 自定义verb的返回值和异常，不适用于vary，怎么解决？
         throw new \BadMethodCallException('Not Implemented',501);
       }
     }catch(\Throwable $t){
@@ -133,6 +142,34 @@ abstract class api{
       else
         throw new \InvalidArgumentException("缺少必要的查询参数{$name}",400);
     }
+  }#}}}
+
+
+  final private function etag(string $payload):void{#{{{
+    if(
+      isset($payload) &&
+      !headers_sent() &&
+      !in_array(http_response_code(),[304,412,204,206,416])
+    ){
+
+      $etag = '"'.crc32(ob_get_contents().join(headers_list()).$payload).'"';//算法仅此一处
+
+      $comp = function(string $etag, ?string $IF, bool $W=true):bool{
+        return $IF && in_array($etag, array_map(function($v) use ($W){
+          return ltrim($v,' '.$W?'W/':'');
+        },explode(',',$IF)));
+      };
+
+      if(
+        isset($_SERVER['HTTP_IF_NONE_MATCH']) &&
+        $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH'])
+      ){
+        http_response_code(304);
+      }else
+        header("ETag: $etag");
+
+    }
+
   }#}}}
 
 
