@@ -27,16 +27,16 @@ abstract class api{
       case 'DELETE':
         $ret = static::{$verb}(...$this->query2parameters($verb, $_GET));
         if(ob_get_length()) throw new \Error('Internal Server Error',500);
-        http_response_code($ret?204:202);
+        http_response_code($ret?203:202);
         return '';
       case 'TRACE':
       case 'CONNECT':
       default:
         throw new \BadMethodCallException('Not Implemented',501);
       }
-    }catch(\Throwable $t){ //要求throw new Error('10086 业务错误码', 401);
+    }catch(\Throwable $t){
 
-      http_response_code(max(-1,$t->getCode())?:500);//FIXME -11将输出65525，但httpie不支持-11
+      http_response_code(max(-1,$t->getCode())?:500);
 
       if($t->getCode() === 0){
         $code = 0;
@@ -49,7 +49,6 @@ abstract class api{
       $ret = $this->vary([
         'code'=>(int)$code===(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
-        'msg'=>$t->getMessage(),
       ]);
 
       header('Content-Length: '.strlen($ret));
@@ -104,7 +103,7 @@ abstract class api{
       case \DateTimeImmutable::class:
       case \DateTimeInterface::class:
         try{
-          yield new \DateTimeImmutable($value); //FIXME 如果引用 \DateTimeImmutable &$date，怎么处理？
+          yield new \DateTimeImmutable($value);
         }catch(\Exception $e){
           throw new \InvalidArgumentException("无法将{$name}='{$value}'转换成{$type}",400,$e);
         }

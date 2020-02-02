@@ -20,17 +20,80 @@ class rest extends api{
     return array_filter(['GET','OPTIONS','POST','PUT','PATCH','DELETE'],fn($m) => method_exists(static::class,$m));
   }
 
+
+  /**
+   * CORS适用于
+   * xhr,fetch调用
+   * @font-face加载
+   * WebGL贴图
+   * <canvas>drawImage加载
+   *
+   * 以下安全范围之内，不会触发OPTIONS
+   * HEAD,GET,POST
+   * Accept,Accept-Language, Content-Language,
+   * DPR, Downlink, Save-Data, Viewport-Width, Width
+   * Last-Event-ID, 
+   * Content-Type: application/x-www-form-urlencoded, multipart/form-data, text/plain
+   * xhrUpload对象不能注册listener
+   * 不能使用ReadableStream对象
+   */
   final function OPTIONS($age=600):string{#{{{
-    if(
-      isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']) &&
-      method_exists(static::class,$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])
-    ){
+    if(isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])){
+
+      //FIXME 这样相当于*，但是应该有种机制允许开发者设定白名单
+      //FIXME 当Origin&&Cookie并存时，Origin不能是*
+      header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
+
+      //FIXME Age仅适用于OPTIONS预请求
       header('Access-Control-Max-Age: '.is_numeric($age)&&settype($age,'int')?$age:600);
       header('Access-Control-Allow-Methods: '.implode(', ',$this->method()));
-      if(isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']))
-        header('Access-Control-Allow-Headers: '.$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']);
+
+      if(isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']) &&
+        method_exists(static::class,$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']))
+      header("Access-Control-Allow-Headers: {$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']}");
+
+
+      //FIXME 预检测OPTIONS里的Credentials表示实际请求是否支持Credentials
+      //TODO 仅当实际处理了session/cookie，则发送
+      //header('Access-Control-Allow-Credentials: true');
+
     }
+    http_response_code(204);
     return '';
+  }#}}}
+
+
+  /**
+   * 所有verb执行之后，才能获取header，继而追加CORS头
+   * @todo 需要区别普通OPTIONS和预请求OPTIONS，不要重复设置header
+   */
+  final private function CORS():void{#{{{
+    if(
+      !headers_sent() && //FIXME 如果ob_flush之后，还能再发送header吗？
+      isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCEPT']) &&
+      strcasecmp($_SERVER['HTTP_ACCEPT'],'text/event-stream') //不是text/event-stream
+    ){
+      header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
+        $v = strstr($v,':',true);
+        return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma'])?null:$v;
+      },headers_list())),', '));
+    }
+
+
+    if(isset($_SERVER['HTTP_ORIGIN'])){
+
+      //TODO 当Origin&&Cookie并存时，Origin不能是*
+      header('Access-Control-Allow-Origin: '.$_SERVER['HTTP_ORIGIN']);
+
+      //FIXME xhr设置Credentials之后发送cookie，如果不响应true，则UA阻断内容？
+      if(isset($_COOKIE))
+        header("Access-Control-Allow-Credentials: true");
+
+      //FIXME 如果Origin不是*，就必须设置Vary
+      header('Vary: Origin');
+
+    }
+
   }#}}}
 
 
@@ -66,27 +129,6 @@ class rest extends api{
       }else
         header("ETag: $etag");
 
-    }
-
-  }#}}}
-
-  final private function CORS():void{#{{{
-    if(
-      !headers_sent() &&
-      isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCEPT']) &&
-      strcasecmp($_SERVER['HTTP_ACCEPT'],'text/event-stream') //不是text/event-stream
-    ){
-      header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
-        $v = strstr($v,':',true);
-        return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma'])?null:$v;
-      },headers_list())),','));
-    }
-
-
-    if(isset($_SERVER['HTTP_ORIGIN']) && is_scalar($_SERVER['HTTP_ORIGIN'])){
-      header('Access-Control-Allow-Origin: '.$_SERVER['HTTP_ORIGIN']);
-      header("Access-Control-Allow-Credentials: true");
-      header('Vary: Origin');
     }
 
   }#}}}
