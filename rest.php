@@ -1,10 +1,8 @@
 <?php namespace srv; // vim: se fdm=marker:
 
 /**
- * CORS，标注安全header
  * 流量限制
  * auth，token，session/cookie
- * vary协商Accept
  */
 class rest{
 
@@ -12,10 +10,6 @@ class rest{
     return $this($_SERVER['REQUEST_METHOD']);
   }
 
-  /**
-   * 收集谓词，为了向OPTIONS暴露方法，也可能用__debugInfo提取swagger
-   * @fixme protected是为了向父类的__debugInfo调用权限
-   */
   final private function method():array{
     return array_filter(['GET','OPTIONS','POST','PUT','PATCH','DELETE'],fn($m) => method_exists(static::class,$m));
   }
@@ -37,14 +31,9 @@ class rest{
    * xhrUpload对象不能注册listener
    * 不能使用ReadableStream对象
    */
-  final function OPTIONS($age=600):string{#{{{
+  final function OPTIONS($age=600):void{#{{{
     if(isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])){
 
-      //FIXME 这样相当于*，但是应该有种机制允许开发者设定白名单
-      //FIXME 当Origin&&Cookie并存时，Origin不能是*
-      header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
-
-      //FIXME Age仅适用于OPTIONS预请求
       header('Access-Control-Max-Age: '.is_numeric($age)&&settype($age,'int')?$age:600);
       header('Access-Control-Allow-Methods: '.implode(', ',$this->method()));
 
@@ -52,44 +41,31 @@ class rest{
         method_exists(static::class,$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']))
       header("Access-Control-Allow-Headers: {$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']}");
 
-
-      //FIXME 预检测OPTIONS里的Credentials表示实际请求是否支持Credentials
-      //TODO 仅当实际处理了session/cookie，则发送
-      //header('Access-Control-Allow-Credentials: true');
+      header('Access-Control-Allow-Credentials: true');//FIXME 尚未执行目标方法之前，无法获知
 
     }
     http_response_code(204);
-    return '';
   }#}}}
 
+  final function HEAD():void{
+    static::GET(...$this->query2parameters('GET', $_GET));
+  }
 
-  /**
-   * 所有verb执行之后，才能获取header，继而追加CORS头
-   * @todo 需要区别普通OPTIONS和预请求OPTIONS，不要重复设置header
-   */
+
   final private function CORS():void{#{{{
-    if(
-      !headers_sent() && //FIXME 如果ob_flush之后，还能再发送header吗？
-      isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCEPT']) &&
-      strcasecmp($_SERVER['HTTP_ACCEPT'],'text/event-stream') //不是text/event-stream
-    ){
+
+    if(isset($_SERVER['HTTP_ORIGIN'])){
+
+      header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
+
       header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
         $v = strstr($v,':',true);
         return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma'])?null:$v;
       },headers_list())),', '));
-    }
 
-
-    if(isset($_SERVER['HTTP_ORIGIN'])){
-
-      //TODO 当Origin&&Cookie并存时，Origin不能是*
-      header('Access-Control-Allow-Origin: '.$_SERVER['HTTP_ORIGIN']);
-
-      //FIXME xhr设置Credentials之后发送cookie，如果不响应true，则UA阻断内容？
-      if(isset($_COOKIE))
+      if(isset($_COOKIE) || $this->header('Set-Cookie'))
         header("Access-Control-Allow-Credentials: true");
 
-      //FIXME 如果Origin不是*，就必须设置Vary
       header('Vary: Origin');
 
     }
@@ -279,15 +255,19 @@ class rest{
 
 
   final function __call($verb,$arg):void{
-    if(strcasecmp($verb,'GET') && strcasecmp($verb,'HEAD'))
-    throw new \BadMethodCallException('Not Implemented',501);
+    if(strcasecmp($verb,'GET')) throw new \BadMethodCallException('Not Implemented',501);
   }
 
   final function __invoke(string $verb):string{
     try{
       ob_start();
       switch($verb){
+
       case 'HEAD':
+      case 'OPTIONS':
+        static::$verb();
+        return '';
+
       case 'GET':
         $ret = $this->vary(static::GET(...$this->query2parameters('GET', $_GET)));
         if(ob_get_length()) throw new \Error('Internal Server Error',500);
@@ -296,25 +276,14 @@ class rest{
         $this->etag($ret);
         return $ret;
 
-      case 'OPTIONS'://WebDAV CalDAV
-        header('DASL: <DAV:sql>');
-        header('DAV: 1 ,2');
-        //列出服务器支持的所有verb
-        header('Public: OPTIONS, TRACE, GET, HEAD, DELETE, PUT, POST, COPY, MOVE, MKCOL, PROPFIND, PROPPATCH, LOCK, UNLOCK， SEARCH');
-        //仅列出对当前资源适用的verb
-        header('Allow: OPTIONS, TRACE, GET, HEAD, DELETE, PUT, COPY, MOVE, MKCOL, PROPFIND, PROPPATCH, LOCK, UNLOCK， SEARCH');
-        return $this->OPTIONS();
 
       case 'DELETE'://WebDAV
-        http_response_code(207);//204, 207, 423
-        $_SERVER['HTTP_IF'];
-        break;
-
-      case 'PUT'://WebDAV CalDAV
-
+        //http_response_code(207);//204, 207, 423
+        //$_SERVER['HTTP_IF'];
+      case 'PUT':
       case 'PATCH':
       case 'POST':
-        $ret = static::{$verb}(...$this->query2parameters($verb, $_GET));
+        $ret = static::$verb(...$this->query2parameters($verb, $_GET));
         if(ob_get_length()) throw new \Error('Internal Server Error',500);
         http_response_code($ret?204:202);
         return '';
@@ -323,43 +292,7 @@ class rest{
       case 'CONNECT':
         //FIXME 不要干扰web容器自身的实现
 
-      case 'PROPFIND'://获取一个或多个文件的属性，可以请求所有属性kv，一组属性kv，或所有属性k
-        $_SERVER['HTTP_DEPTH'];
-        http_response_code(207);//200, 207, 403, 404
-        return '<xml>';
-        break;
-      case 'PROPPATCH'://对指定的资源原子化设置或删除多个属性
-        http_response_code(207);//200, 207, 401, 403, 409, 423, 507
-        $_SERVER['HTTP_IF'];
-        break;
-      case 'MKCOL':
-        http_response_code(201);//201, 207, 403, 405, 409, 415, 422, 507
-        break;
-
-      case 'COPY':
-        http_response_code(207);//102, 201, 204, 207, 403, 409, 412, 423, 502, 507
-
-      case 'MOVE'://比COPY多一步骤，复制后检查完整性，然后删除原始资源
-        http_response_code(207);//102, 201, 204, 207, 403, 409, 412, 423, 502
-        $_SERVER['HTTP_DESTINATION'];
-        $_SERVER['HTTP_OVERWRITE'];
-        $_SERVER['HTTP_DEPTH'];
-        $_SERVER['HTTP_IF'];
-        break;
-
-      case 'LOCK':
-        $_SERVER['HTTP_IF'];
-
-      case 'UNLOCK':
-        $_SERVER['HTTP_IF'];
-
-      //https://tools.ietf.org/html/rfc4791
-      case 'REPORT'://CalDAV
-      case 'MKCALENDAR'://CalDAV
-
       default:
-        //FIXME 要允许public自定义方法，但防止xss
-        //FIXME 自定义verb的返回值和异常，不适用于vary，怎么解决？
         throw new \BadMethodCallException('Not Implemented',501);
       }
     }catch(\Throwable $t){
@@ -383,6 +316,7 @@ class rest{
       return $ret;
     }finally{
       ob_end_clean();
+      $this->CORS();
     }
   }
 
