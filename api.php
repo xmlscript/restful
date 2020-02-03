@@ -22,21 +22,66 @@ abstract class api{
         $this->etag($ret);
         return $ret;
 
-      case 'OPTIONS':
+      case 'OPTIONS'://WebDAV CalDAV
+        header('DASL: <DAV:sql>');
+        header('DAV: 1 ,2');
+        //列出服务器支持的所有verb
+        header('Public: OPTIONS, TRACE, GET, HEAD, DELETE, PUT, POST, COPY, MOVE, MKCOL, PROPFIND, PROPPATCH, LOCK, UNLOCK， SEARCH');
+        //仅列出对当前资源适用的verb
+        header('Allow: OPTIONS, TRACE, GET, HEAD, DELETE, PUT, COPY, MOVE, MKCOL, PROPFIND, PROPPATCH, LOCK, UNLOCK， SEARCH');
         return $this->OPTIONS();
 
-      case 'PUT':
+      case 'DELETE'://WebDAV
+        http_response_code(207);//204, 207, 423
+        $_SERVER['HTTP_IF'];
+        break;
+
+      case 'PUT'://WebDAV CalDAV
+
       case 'PATCH':
       case 'POST':
-      case 'DELETE':
         $ret = static::{$verb}(...$this->query2parameters($verb, $_GET));
         if(ob_get_length()) throw new \Error('Internal Server Error',500);
-        http_response_code($ret?203:202);
+        http_response_code($ret?204:202);
         return '';
 
       case 'TRACE':
       case 'CONNECT':
         //FIXME 不要干扰web容器自身的实现
+
+      case 'PROPFIND'://获取一个或多个文件的属性，可以请求所有属性kv，一组属性kv，或所有属性k
+        $_SERVER['HTTP_DEPTH'];
+        http_response_code(207);//200, 207, 403, 404
+        return '<xml>';
+        break;
+      case 'PROPPATCH'://对指定的资源原子化设置或删除多个属性
+        http_response_code(207);//200, 207, 401, 403, 409, 423, 507
+        $_SERVER['HTTP_IF'];
+        break;
+      case 'MKCOL':
+        http_response_code(201);//201, 207, 403, 405, 409, 415, 422, 507
+        break;
+
+      case 'COPY':
+        http_response_code(207);//102, 201, 204, 207, 403, 409, 412, 423, 502, 507
+
+      case 'MOVE'://比COPY多一步骤，复制后检查完整性，然后删除原始资源
+        http_response_code(207);//102, 201, 204, 207, 403, 409, 412, 423, 502
+        $_SERVER['HTTP_DESTINATION'];
+        $_SERVER['HTTP_OVERWRITE'];
+        $_SERVER['HTTP_DEPTH'];
+        $_SERVER['HTTP_IF'];
+        break;
+
+      case 'LOCK':
+        $_SERVER['HTTP_IF'];
+
+      case 'UNLOCK':
+        $_SERVER['HTTP_IF'];
+
+      //https://tools.ietf.org/html/rfc4791
+      case 'REPORT'://CalDAV
+      case 'MKCALENDAR'://CalDAV
 
       default:
         //FIXME 要允许public自定义方法，但防止xss
