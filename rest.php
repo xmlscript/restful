@@ -11,6 +11,7 @@ class rest{
   }
 
   final private function method():array{
+    //FIXME 私有方法？
     return array_filter(['GET','OPTIONS','POST','PUT','PATCH','DELETE'],fn($m) => method_exists(static::class,$m));
   }
 
@@ -52,21 +53,26 @@ class rest{
   }
 
 
+  /**
+   * 执行完目标方法之后立即收集headers，以免暴露太多内部使用的header
+   *
+   */
   final private function CORS():void{#{{{
 
     if(isset($_SERVER['HTTP_ORIGIN'])){
 
-      header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
-
+      //FIXME 有必要暴露这些吗？X-Powered-By, Vary, Content-Length, ETag, Origin
       header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
         $v = strstr($v,':',true);
-        return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma'])?null:$v;
-      },headers_list())),', '));
+        return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma','X-Powered-By'])?null:$v;
+      },headers_list())),', '),false);
 
-      if(isset($_COOKIE) || $this->header('Set-Cookie'))
+      header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
+
+      if(count($_COOKIE) || $this->header('Set-Cookie'))
         header("Access-Control-Allow-Credentials: true");
 
-      header('Vary: Origin');
+      header('Vary: Origin',false);
 
     }
 
@@ -81,7 +87,7 @@ class rest{
     $ACCEPT = explode(';',$content_type,2)[0]?:$_SERVER['HTTP_ACCEPT']??ini_get('default_mimetype').',*/*;q=0.1';
     $charset = substr(stristr($content_type,'charset='),8)?:ini_get('default_charset')?:'UTF-8';
 
-    header('Vary: Accept');
+    header('Vary: Accept',false);
 
     if(is_resource($data))
       switch(get_resource_type($data)){
@@ -258,6 +264,9 @@ class rest{
     if(strcasecmp($verb,'GET')) throw new \BadMethodCallException('Not Implemented',501);
   }
 
+  /**
+   * @TODO 仅仅代理执行目标方法，其余交给各自子类的toString实现
+   */
   final function __invoke(string $verb):string{
     try{
       ob_start();
@@ -269,12 +278,12 @@ class rest{
         return '';
 
       case 'GET':
-        $ret = $this->vary(static::GET(...$this->query2parameters('GET', $_GET)));
+       $ret = $this->vary(static::GET(...$this->query2parameters('GET', $_GET)));
         if(ob_get_length()) throw new \Error('Internal Server Error',500);
+        $this->CORS();
         header('Content-Length: '.strlen($ret));
         if(empty($ret) && http_response_code()===200) http_response_code(204);
-        $this->etag($ret);
-        return $ret;
+        return $this->etag($ret);
 
 
       case 'DELETE'://WebDAV
@@ -285,6 +294,7 @@ class rest{
       case 'POST':
         $ret = static::$verb(...$this->query2parameters($verb, $_GET));
         if(ob_get_length()) throw new \Error('Internal Server Error',500);
+        $this->CORS();
         http_response_code($ret?204:202);
         return '';
 
@@ -308,15 +318,15 @@ class rest{
       }
 
       $ret = $this->vary([
-        'code'=>(int)$code===(float)$code?(int)$code:(float)$code,
+        'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
       ]);
 
+      $this->CORS();
       header('Content-Length: '.strlen($ret));
       return $ret;
     }finally{
       ob_end_clean();
-      $this->CORS();
     }
   }
 
@@ -398,30 +408,33 @@ class rest{
   }#}}}
 
 
-  final private function etag(string $payload):void{#{{{
+  /**
+   * @todo 一组数据，如何设置Last-Modified，以及如何同时处理对应的If-Modified-Since
+   * @fixme 内容协商自带Vary: negotiate和Content-Location，如何覆盖？
+   */
+  final private function etag(string &$payload):string{#{{{
     if(
       isset($payload) &&
       !headers_sent() &&
       !in_array(http_response_code(),[304,412,204,206,416])
     ){
 
-      $etag = '"'.crc32(ob_get_contents().join(headers_list()).$payload).'"';//算法仅此一处
+      $etag = '"'.crc32(join(headers_list()).$payload).'"';
 
       $comp = function(string $etag, ?string $IF, bool $W=true):bool{
-        return $IF && in_array($etag, array_map(function($v) use ($W){
-          return ltrim($v,' '.$W?'W/':'');
-        },explode(',',$IF)));
+        return $IF && in_array($etag, array_map(fn($v)=> ltrim($v," $W"?'W/':''),explode(',',$IF)));
       };
 
-      if(
-        isset($_SERVER['HTTP_IF_NONE_MATCH']) &&
-        $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH'])
-      ){
+      if(isset($_SERVER['HTTP_IF_NONE_MATCH']) && $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH'])){
         http_response_code(304);
+        return '';
       }else
         header("ETag: $etag");
 
+
     }
+
+    return $payload;
 
   }#}}}
 
