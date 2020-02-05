@@ -50,6 +50,7 @@ abstract class api{
       }
     }catch(\Throwable $t){
 
+      header_remove();
       http_response_code(max(-1,$t->getCode())?:500);
 
       if($t->getCode() === 0){
@@ -90,7 +91,7 @@ abstract class api{
 
       header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
 
-      if(count($_COOKIE) || $this->header('Set-Cookie'))
+      if(count($_COOKIE) || static::header('Set-Cookie'))
         header("Access-Control-Allow-Credentials: true");
 
       header('Vary: Origin',false);
@@ -98,6 +99,17 @@ abstract class api{
     }
 
   }#}}}
+
+
+  //FIXME 不要考虑Swoole
+  final protected static function header(string $str):?string{
+    foreach(array_reverse(headers_list()) as $item){
+      [$k,$v] = explode(':',$item,2);
+      if(strcasecmp($str, $k)===0)
+        return trim($v);
+    }
+    return null;
+  }
 
 
   /**

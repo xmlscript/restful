@@ -223,17 +223,6 @@ class rest extends api{
   }
 
 
-  //FIXME 不要考虑Swoole
-  final protected static function header(string $str):?string{
-    foreach(array_reverse(headers_list()) as $item){
-      [$k,$v] = explode(':',$item,2);
-      if(strcasecmp($str, $k)===0)
-        return trim($v);
-    }
-    return null;
-  }
-
-
   /**
    * @todo 反射并生成一个标准文档，然后用模板转换成html/cli打印格式
    * @fixme restful不能独占GET
