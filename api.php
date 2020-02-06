@@ -2,52 +2,42 @@
 
 abstract class api{
 
-  final function __call($verb,$arg):void{
-    if(strcasecmp($verb,'GET')) throw new \BadMethodCallException('Not Implemented'.$verb,501);
-  }
-
   /**
    * @TODO 仅仅代理执行目标方法，其余交给各自子类的toString实现
    */
   final function __invoke(string $verb):string{
     try{
       ob_start();
-      switch($verb){
+      if(method_exists($this,$verb))
+        switch($verb){
 
-      case 'HEAD':
-      case 'OPTIONS':
-        static::$verb();
-        return '';
+        case 'HEAD':
+        case 'OPTIONS':
+          static::$verb();
+          return '';
 
-      case 'GET':
-        //FIXME 万一缺少GET，就地501，而不是__call
-       $ret = $this->vary(static::GET(...$this->query2parameters('GET', $_GET)));
-        if(ob_get_length()) throw new \Error('Internal Server Error',500);
-        $this->CORS();
-        header('Content-Length: '.strlen($ret));
-        if(empty($ret) && http_response_code()===200) http_response_code(204);
-        return $this->etag($ret);
+        case 'PUT':
+        case 'PATCH':
+          $ret = static::$verb(...$this->query2parameters($verb, $_GET));
+          if(ob_get_length() && !is_null($ret)) throw new \Error('Internal Server Error',500);
+          http_response_code($ret?204:202);
+          return '';
 
+        case 'TRACE':
+        case 'CONNECT'://有payload
+          //FIXME 不要干扰web容器自身的实现
+          break;
 
-      case 'DELETE'://WebDAV
-        //http_response_code(207);//204, 207, 423
-        //$_SERVER['HTTP_IF'];
-      case 'PUT':
-      case 'PATCH':
-      case 'POST':
-        $ret = static::$verb(...$this->query2parameters($verb, $_GET));
-        if(ob_get_length()) throw new \Error('Internal Server Error',500);
-        $this->CORS();
-        http_response_code($ret?204:202);
-        return '';
-
-      case 'TRACE':
-      case 'CONNECT':
-        //FIXME 不要干扰web容器自身的实现
-
-      default:
-        throw new \BadMethodCallException('Not Implemented',501);
-      }
+        case 'GET':
+        case 'POST':
+        case 'DELETE'://WebDAV
+          $ret = $this->vary(static::$verb(...$this->query2parameters($verb, $_GET)));
+          if(ob_get_length() && !is_null($ret)) throw new \Error('Internal Server Error',500);
+          return $ret;
+          header('Content-Length: '.strlen($ret));
+          return $this->etag($ret);
+        }
+      throw new \BadMethodCallException('Not Implemented',501);
     }catch(\Throwable $t){
 
       header_remove();
@@ -64,13 +54,14 @@ abstract class api{
       $ret = $this->vary([
         'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
+        'msg'=>$t->getMessage(),
       ]);
 
-      $this->CORS();
       header('Content-Length: '.strlen($ret));
       return $ret;
     }finally{
       ob_end_clean();
+      $this->CORS();
     }
   }
 
@@ -198,7 +189,7 @@ abstract class api{
   }#}}}
 
   final private function query2parameters(string $method, array $args):\Generator{#{{{
-    if($method && method_exists($this,$method))
+    //if($method && method_exists($this,$method))
     foreach((new \ReflectionMethod($this,$method))->getParameters() as $param){
       $name = strtolower($param->name);
       if(isset($args[$name])){

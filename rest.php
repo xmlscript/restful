@@ -55,13 +55,26 @@ class rest extends api{
 
   final static function vary($data):string{
 
-    if(is_null($data)) return '';
+    header('Vary: Accept',false);
+
+    switch(gettype($data)){
+    case 'NULL':
+    case 'string':
+    case 'integer':
+    case 'double':
+      return (string)$data;
+    case 'boolean':
+    case 'object':
+    case 'resource':
+    case 'array':
+    default:
+    }
+
+    if(is_null($data) || is_string($data)) return (string)$data;
 
     $content_type = self::header('Content-Type');
     $ACCEPT = explode(';',$content_type,2)[0]?:$_SERVER['HTTP_ACCEPT']??ini_get('default_mimetype').',*/*;q=0.1';
     $charset = substr(stristr($content_type,'charset='),8)?:ini_get('default_charset')?:'UTF-8';
-
-    header('Vary: Accept',false);
 
     if(is_resource($data))
       switch(get_resource_type($data)){
@@ -69,7 +82,7 @@ class rest extends api{
           $ACCEPT .= ',,,image/*;q=.3';
           break;
 
-        case 'curl':
+        case 'curl'://FIXME 如果是ftp等其他非http协议？
           header('Cache-Control: no-cache');
           //$ACCEPT .= ',text/plain;q=.3';
           self::header('Content-Type') || header('Content-Type: text/plain');
@@ -88,6 +101,7 @@ class rest extends api{
       self::header('Content-Type') || header("Content-Type: application/xml;charset=$charset");
       return $data->saveXML();
     }elseif($data instanceof \Iterator){
+      //FIXME yeid可以多次return不同类型，不能贸然转换，因为不知道开发者实现目的
       //FIXME 白白浪费了yield性能
       //TODO 不如让各自MIME自行判断，仍然yield
       $data = iterator_to_array($data);
@@ -161,39 +175,28 @@ class rest extends api{
         case 'text/xml':
           if($data instanceof \PDOStatement){
             //break;
+            //FIXME 如果开发者查询count，或者
             header("Content-Type: $item;charset=$charset");
             header('Content-Type: text/plain');
             $data->execute();
             $arr = $data->fetchAll(\PDO::FETCH_ASSOC);
             var_dump($arr);
             die('//TODO array to xml');
-          }elseif(is_string($data)){//TODO 相信开发者，不要浪费资源判断是否合法xml了
-            header("Content-Type: $item;charset=$charset");
-            return (string)$data;
           }else break;
 
 
-        case 'text/*':
+          //TODO 如果office打开无需验证的接口，则保留，否则失去存在的意义
         case 'text/csv':
           if($data instanceof \PDOStatement){
             header("Content-Type: text/csv;charset=$charset");
             return '$data->fetchAll()';
           }//故意没有break
 
+        case 'text/*':
         case 'text/plain':
           header("Content-Type: text/plain;charset=$charset");
           //TODO 生成填充数据的sql
           break;
-
-        case 'application/x-msgpack':
-        case 'application/vnd.msgpack':
-        case 'application/msgpack':
-          if(false){
-            header("Content-Type: $item;charset=$charset");
-            return msgpack_serialize($data);
-          }
-          break;
-
 
         case '*/*':
         case 'application/json':
@@ -201,9 +204,6 @@ class rest extends api{
             //FIXME 暴殄天物，好端端的二进制，硬生生拆散成string
             header("Content-Type: application/json;charset=$charset");
             return $data->toJsonString();
-          }elseif(is_string($data)&&strlen($data)>1&&$data[0]==='"'&&$data[-1]==='"'&&is_string(json_decode($data,false,1))){
-            header("Content-Type: application/json;charset=$charset");
-            return $data;
           }elseif($data instanceof \PDOStatement){
             header("Content-Type: application/json;charset=$charset");
             return json_encode($data->fetchAll(\PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
@@ -214,12 +214,7 @@ class rest extends api{
 
       }#}}}
 
-    if(self::header('Content-Type')&&(is_string($data)||is_numeric($data)||is_null($data))){
-      return $data;
-    }elseif($data instanceof \Google\Protobuf\Message){
-      header("Content-Type: application/octet-stream");
-      return $data;//TODO 序列化
-    }else throw new \Error('Not Accepted',406);
+    throw new \Error('Internal Server Error',500);
   }
 
 
