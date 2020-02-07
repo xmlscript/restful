@@ -1,5 +1,5 @@
 {
-    "name": "xmlscript/srv",
+    "name": "xmlscript/restful",
     "description": "rest wrapper",
     "license": "MIT",
     "authors": [
@@ -9,11 +9,11 @@
         }
     ],
     "require": {
-      "php": ">=7.1"
+      "php": ">=7.4"
     },
     "autoload": {
       "psr-4": {
-        "srv\\": ""
+        "http\\": ""
       }
     }
 }
