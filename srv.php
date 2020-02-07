@@ -6,13 +6,8 @@ abstract class srv{
     return $this($_SERVER['REQUEST_METHOD']);
   }
 
-
-  /**
-   * 子类自行实现的所有public方法都是verb
-   */
-  final private function method():array{
-    //FIXME 私有方法？
-    return array_filter(['GET','OPTIONS','POST','PUT','PATCH','DELETE'],fn($m) => method_exists(static::class,$m));
+  final private static function method():array{
+    return array_map('strtoupper',array_filter(array_column((new \ReflectionClass(static::class))->getMethods(\ReflectionMethod::IS_PUBLIC),'name'),'ctype_alpha'));
   }
 
   /**
@@ -31,11 +26,11 @@ abstract class srv{
    * xhrUpload对象不能注册listener
    * 不能使用ReadableStream对象
    */
-  final function OPTIONS($age=600):void{#{{{
+  final static function OPTIONS($age=600):void{#{{{
     if(isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])){
 
       header('Access-Control-Max-Age: '.is_numeric($age)&&settype($age,'int')?$age:600);
-      header('Access-Control-Allow-Methods: '.implode(', ',$this->method()));
+      header('Access-Control-Allow-Methods: '.implode(', ',self::method()));
 
       if(isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']) &&
         method_exists(static::class,$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']))
@@ -47,46 +42,28 @@ abstract class srv{
     http_response_code(204);
   }#}}}
 
-  final function HEAD():void{
-    static::GET(...$this->query2parameters('GET', $_GET));
+
+  /**
+   * @fixme 全都搞成static
+   */
+  final static function HEAD():void{
+    self::GET(...self::query2parameters('GET', $_GET));
   }
 
   /**
    * @TODO 仅仅代理执行目标方法，其余交给各自子类的toString实现
    */
   final function __invoke(string $verb):string{
+
     try{
+      if(!in_array(strtoupper($verb),self::method())) throw new \BadMethodCallException('Not Implemented',501);
       ob_start();
-      if(method_exists($this,$verb))
-        switch($verb){
+      $ret = self::vary(static::$verb(...self::query2parameters($verb, $_GET)));
+      if(ob_get_length() && !is_null($ret)) throw new \Error('Internal Server Error',500);
+      header('Content-Length: '.strlen($ret));
 
-        case 'HEAD':
-        case 'OPTIONS':
-          static::$verb();
-          return '';
-
-        case 'PUT':
-        case 'PATCH':
-          $ret = static::$verb(...$this->query2parameters($verb, $_GET));
-          if(ob_get_length() && !is_null($ret)) throw new \Error('Internal Server Error',500);
-          http_response_code($ret?204:202);
-          return '';
-
-        case 'TRACE':
-        case 'CONNECT'://有payload
-          //FIXME 不要干扰web容器自身的实现
-          break;
-
-        case 'GET':
-        case 'POST':
-        case 'DELETE':
-          $ret = $this->vary(static::$verb(...$this->query2parameters($verb, $_GET)));
-          if(ob_get_length() && !is_null($ret)) throw new \Error('Internal Server Error',500);
-          return $ret;
-          header('Content-Length: '.strlen($ret));
-          return $this->etag($ret);
-        }
-      throw new \BadMethodCallException('Not Implemented',501);
+      //FIXME PUT/PATCH要返回201/204/202
+      return self::etag($ret);//FIXME HEAD/OPTIONS小心携带ETag
     }catch(\Throwable $t){
 
       header_remove();
@@ -100,7 +77,7 @@ abstract class srv{
         $reason = trim($t->getMessage());
       }
 
-      $ret = $this->vary([
+      $ret = self::vary([
         'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
         'msg'=>$t->getMessage(),
@@ -110,12 +87,12 @@ abstract class srv{
       return $ret;
     }finally{
       ob_end_clean();
-      $this->CORS();
+      self::CORS();
     }
   }
 
 
-  final static function vary($data):string{
+  final private static function vary($data):string{
 
     header('Vary: Accept',false);
 
@@ -305,7 +282,7 @@ abstract class srv{
    * 执行完目标方法之后立即收集headers，以免暴露太多内部使用的header
    *
    */
-  final private function CORS():void{#{{{
+  final private static function CORS():void{#{{{
 
     if(isset($_SERVER['HTTP_ORIGIN'])){
 
@@ -317,7 +294,7 @@ abstract class srv{
 
       header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
 
-      if(count($_COOKIE) || static::header('Set-Cookie'))
+      if(count($_COOKIE) || self::header('Set-Cookie'))
         header("Access-Control-Allow-Credentials: true");
 
       header('Vary: Origin',false);
@@ -328,7 +305,7 @@ abstract class srv{
 
 
   //FIXME 不要考虑Swoole
-  final protected static function header(string $str):?string{
+  final private static function header(string $str):?string{
     foreach(array_reverse(headers_list()) as $item){
       [$k,$v] = explode(':',$item,2);
       if(strcasecmp($str, $k)===0)
@@ -342,7 +319,7 @@ abstract class srv{
    * @todo 一组数据，如何设置Last-Modified，以及如何同时处理对应的If-Modified-Since
    * @fixme 内容协商自带Vary: negotiate和Content-Location，如何覆盖？
    */
-  final private function etag(string &$payload):string{#{{{
+  final private static function etag(string &$payload):string{#{{{
     if(
       isset($payload) &&
       !headers_sent() &&
@@ -369,7 +346,7 @@ abstract class srv{
   }#}}}
 
 
-  private function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
+  final private static function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
     switch($type){
       case null:
       case 'string':
@@ -423,20 +400,20 @@ abstract class srv{
     }
   }#}}}
 
-  final private function query2parameters(string $method, array $args):\Generator{#{{{
+  final private static function query2parameters(string $method, array $args):\Generator{#{{{
     //if($method && method_exists($this,$method))
-    foreach((new \ReflectionMethod($this,$method))->getParameters() as $param){
+    foreach((new \ReflectionMethod(static::class,$method))->getParameters() as $param){
       $name = strtolower($param->name);
       if(isset($args[$name])){
         [$type,$allowsNull] = [(string)$param->getType(), $param->allowsNull()];
         if($param->isVariadic()){
           if(is_array($args[$name]))
             foreach($args[$name] as $v)
-              yield from $this->check($type, $v, $name, $allowsNull);
+              yield from self::check($type, $v, $name, $allowsNull);
           else//可变长参数，变通一下，允许不使用数组形式，而直接临时使用标量
-            yield from $this->check($type, $args[$name], $name, $allowsNull);
+            yield from self::check($type, $args[$name], $name, $allowsNull);
         }else{//必然string
-          yield from $this->check($type, $args[$name], $name, $allowsNull);
+          yield from self::check($type, $args[$name], $name, $allowsNull);
         }
       }elseif($param->isOptional() && $param->isDefaultValueAvailable())
         yield $param->getDefaultValue();
