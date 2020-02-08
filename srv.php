@@ -58,13 +58,20 @@ abstract class srv{
     try{
       if(!in_array(strtoupper($verb),self::method())) throw new \BadMethodCallException('Not Implemented',501);
       ob_start();
-      $ret = json_encode(static::$verb(...self::query2parameters($verb, $_GET)), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR);
-      if(ob_get_length()) throw new \Error('Internal Server Error',500);
-      header('Content-Length: '.strlen($ret));
+      $ret = static::$verb(...self::query2parameters($verb, $_GET));
+      if(ob_get_length()) throw new \Error('-1 Internal Server Error',500);
 
-      self::CORS();
+      if(is_string($ret)){
+        //FIXME 强制输出XML怎么办？
+        //return  $ret;
+      }
+      elseif(is_resource($ret))
+        throw new \Error('-2 Internal Server Error',500);
+
       //FIXME PUT/PATCH要返回201/204/202
-      return self::etag($ret);//FIXME HEAD/OPTIONS小心携带ETag
+
+      header('Content-Type: application/json;charset=UTF-8');
+      return self::etag(json_encode($ret, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR));
 
     }catch(\Throwable $t){
 
@@ -80,17 +87,14 @@ abstract class srv{
       }
 
       header('Content-Type: application/json;charset=UTF-8');
-      $ret = json_encode([
+      return self::etag(json_encode([
         'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
-        'error'=>$t->getMessage(),
-        'no'=>$t->getCode()
-      ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
+      ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION));
 
-      header('Content-Length: '.strlen($ret));
-      return $ret;
     }finally{
       ob_end_clean();
+      self::CORS();
     }
   }
 
@@ -136,7 +140,7 @@ abstract class srv{
    * @todo 一组数据，如何设置Last-Modified，以及如何同时处理对应的If-Modified-Since
    * @fixme 内容协商自带Vary: negotiate和Content-Location，如何覆盖？
    */
-  final private static function etag(string &$payload):string{#{{{
+  final private static function etag(string $payload):string{#{{{
     if(
       isset($payload) &&
       !headers_sent() &&
