@@ -63,7 +63,7 @@ abstract class srv{
 
       if(is_string($ret)){
         //FIXME 强制输出XML怎么办？
-        //return  $ret;
+        return  self::etag($ret);
       }
       elseif(is_resource($ret))
         throw new \Error('-2 Internal Server Error',500);
