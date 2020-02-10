@@ -85,6 +85,7 @@ abstract class srv{
         $reason = trim($t->getMessage());
       }
 
+      header('Content-Type: application/json;charset=UTF-8');
       return self::etag(json_encode([
         'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
