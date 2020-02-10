@@ -89,7 +89,6 @@ abstract class srv{
       return self::etag(json_encode([
         'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
-        'msg'=>$t->getMessage(),
       ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION));
 
     }finally{
