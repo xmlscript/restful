@@ -6,6 +6,12 @@ abstract class srv{
     return $this($_SERVER['REQUEST_METHOD']);
   }
 
+  /**
+   * 反射所有暴露谓词
+   * public显而易见，也便于test
+   * alpha是为了排除__set_state，也更符合语义
+   * upper是为了兼容开发者习惯
+   */
   final private static function method():array{
     return array_map('strtoupper',array_filter(array_column((new \ReflectionClass(static::class))->getMethods(\ReflectionMethod::IS_PUBLIC),'name'),'ctype_alpha'));
   }
@@ -26,7 +32,7 @@ abstract class srv{
    * xhrUpload对象不能注册listener
    * 不能使用ReadableStream对象
    */
-  final static function OPTIONS($age=600):void{#{{{
+  final function OPTIONS($age=600):void{#{{{
     if(isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])){
 
       header('Access-Control-Max-Age: '.is_numeric($age)&&settype($age,'int')?$age:600);
@@ -44,37 +50,30 @@ abstract class srv{
 
 
   /**
-   * @fixme 全都搞成static
+   * @todo 没有final就是debug开发版，或者method或者class，两者必有其一是final
    */
-  final static function HEAD():void{
-    self::GET(...self::query2parameters('GET', $_GET));
+  final function HEAD():void{
+    $this->GET(...self::query2parameters('GET', $_GET));
   }
 
-  /**
-   * @TODO 仅仅代理执行目标方法，其余交给各自子类的toString实现
-   */
+  function GET(){
+  }
+
   final function __invoke(string $verb):string{
 
     try{
       if(!in_array(strtoupper($verb),self::method())) throw new \BadMethodCallException('Not Implemented',501);
       ob_start();
-      $ret = static::$verb(...self::query2parameters($verb, $_GET));
+      $ret = static::$verb(...self::query2parameters($verb, $_GET))??'';
       if(ob_get_length()) throw new \Error('-1 Internal Server Error',500);
 
-      if(is_string($ret)){
-        //FIXME 强制输出XML怎么办？
-        return  self::etag($ret);
-      }
-      elseif(is_resource($ret))
-        throw new \Error('-2 Internal Server Error',500);
-
-      //FIXME PUT/PATCH要返回201/204/202
+      if(is_scalar($ret))
+        return self::etag($ret);
 
       header('Content-Type: application/json;charset=UTF-8');
       return self::etag(json_encode($ret, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR));
 
     }catch(\Throwable $t){
-
       header_remove();
       http_response_code(max(-1,$t->getCode())?:500);
 
@@ -86,10 +85,10 @@ abstract class srv{
         $reason = trim($t->getMessage());
       }
 
-      header('Content-Type: application/json;charset=UTF-8');
       return self::etag(json_encode([
         'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
+        'msg'=>$t->getMessage(),
       ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION));
 
     }finally{
@@ -142,7 +141,6 @@ abstract class srv{
    */
   final private static function etag(string $payload):string{#{{{
     if(
-      isset($payload) &&
       !headers_sent() &&
       !in_array(http_response_code(),[304,412,204,206,416])
     ){
@@ -158,7 +156,6 @@ abstract class srv{
         return '';
       }else
         header("ETag: $etag");
-
 
     }
 
