@@ -2,19 +2,81 @@
 
 abstract class srv{
 
-  function __toString(){
-    $ret = $this($_SERVER['REQUEST_METHOD']);
-    header('Content-Length: '.strlen($ret));
-    self::CORS();
-    return self::etag($ret);
+  final function __invoke(string $verb){
+    if(!in_array(strtoupper($verb),self::method())) throw new \BadMethodCallException('Not Implemented',501);
+    return static::$verb(...self::query2parameters($verb, $_GET));
   }
 
-  /**
-   * 反射所有暴露谓词
-   * public显而易见，也便于test
-   * alpha是为了排除__set_state，也更符合语义
-   * upper是为了兼容开发者习惯
-   */
+  final function __toString():string{//{{{
+    try{
+      ob_start();
+      $ret = $this($_SERVER['REQUEST_METHOD']);
+      if(ob_get_length()) throw new \Error('-1 Internal Server Error',500);
+      if(!is_string($ret)){
+        header('Content-Type: application/json;charset=UTF-8');
+        $ret = json_encode($ret, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR);
+      }
+    }catch(\Throwable $t){
+      header_remove();
+      http_response_code(max(-1,$t->getCode())?:500);
+
+      if($t->getCode() === 0){
+        $code = 0;
+        $reason = 'Internal Server Error';
+      }elseif(!sscanf($t->getMessage(),'%e%[^$]',$code,$reason)){
+        $code = 0;
+        $reason = trim($t->getMessage());
+      }
+
+      header('Content-Type: application/json;charset=UTF-8');
+      $ret = json_encode([
+        'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
+        'reason'=>(string)$reason,
+      ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
+
+    }finally{
+      ob_end_clean();
+
+      header('Content-Length: '.strlen($ret));
+
+      if(isset($_SERVER['HTTP_ORIGIN'])){//CORS
+        //FIXME 有必要暴露这些吗？X-Powered-By, Vary, Content-Length, ETag, Origin
+        header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
+          $v = strstr($v,':',true);
+          return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma','X-Powered-By'])?null:$v;
+        },headers_list())),', '),false);
+
+        header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
+
+        if(count($_COOKIE) || self::header('Set-Cookie'))
+          header("Access-Control-Allow-Credentials: true");
+
+        header('Vary: Origin',false);
+      }
+
+
+      if(
+        !headers_sent() &&
+        !in_array(http_response_code(),[304,412,204,206,416])
+      ){//ETag
+
+        $etag = '"'.crc32(join(headers_list()).$ret).'"';
+
+        $comp = function(string $etag, ?string $IF, bool $W=true):bool{
+          return $IF && in_array($etag, array_map(fn($v)=> ltrim($v," $W"?'W/':''),explode(',',$IF)));
+        };
+
+        if(isset($_SERVER['HTTP_IF_NONE_MATCH']) && $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH']))
+          http_response_code(304);
+        else
+          header("ETag: $etag");
+      }
+
+
+      return $ret;
+    }
+  }//}}}
+
   final private static function method():array{
     return array_map('strtoupper',array_filter(array_column((new \ReflectionClass(static::class))->getMethods(\ReflectionMethod::IS_PUBLIC),'name'),'ctype_alpha'));
   }
@@ -52,77 +114,12 @@ abstract class srv{
   }#}}}
 
 
-  /**
-   * @todo 没有final就是debug开发版，或者method或者class，两者必有其一是final
-   */
   final function HEAD():void{
     $this->GET(...self::query2parameters('GET', $_GET));
   }
 
   function GET(){}
 
-  final function __invoke(string $verb):string{
-
-    try{
-      ob_start();
-      if(!in_array(strtoupper($verb),self::method())) throw new \BadMethodCallException('Not Implemented',501);
-      $ret = static::$verb(...self::query2parameters($verb, $_GET))??'';
-      if(ob_get_length()) throw new \Error('-1 Internal Server Error',500);
-
-      if(is_scalar($ret))
-        return $ret;
-
-      header('Content-Type: application/json;charset=UTF-8');
-      return json_encode($ret, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR);
-
-    }catch(\Throwable $t){
-      header_remove();
-      http_response_code(max(-1,$t->getCode())?:500);
-
-      if($t->getCode() === 0){
-        $code = 0;
-        $reason = 'Internal Server Error';
-      }elseif(!sscanf($t->getMessage(),'%e%[^$]',$code,$reason)){
-        $code = 0;
-        $reason = trim($t->getMessage());
-      }
-
-      header('Content-Type: application/json;charset=UTF-8');
-      return json_encode([
-        'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
-        'reason'=>(string)$reason,
-      ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
-
-    }finally{
-      ob_end_clean();
-    }
-  }
-
-
-  /**
-   * 执行完目标方法之后立即收集headers，以免暴露太多内部使用的header
-   *
-   */
-  final private static function CORS():void{#{{{
-
-    if(isset($_SERVER['HTTP_ORIGIN'])){
-
-      //FIXME 有必要暴露这些吗？X-Powered-By, Vary, Content-Length, ETag, Origin
-      header('Access-Control-Expose-Headers: '.implode(array_filter(array_map(function($v){
-        $v = strstr($v,':',true);
-        return preg_grep("/$v/i",['Cache-Control','Content-Language','Content-Type','Expires','Last-Modified','Pragma','X-Powered-By'])?null:$v;
-      },headers_list())),', '),false);
-
-      header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
-
-      if(count($_COOKIE) || self::header('Set-Cookie'))
-        header("Access-Control-Allow-Credentials: true");
-
-      header('Vary: Origin',false);
-
-    }
-
-  }#}}}
 
 
   //FIXME 不要考虑Swoole
@@ -135,30 +132,6 @@ abstract class srv{
     return null;
   }
 
-
-  final private static function etag(string $payload):string{#{{{
-    if(
-      !headers_sent() &&
-      !in_array(http_response_code(),[304,412,204,206,416])
-    ){
-
-      $etag = '"'.crc32(join(headers_list()).$payload).'"';
-
-      $comp = function(string $etag, ?string $IF, bool $W=true):bool{
-        return $IF && in_array($etag, array_map(fn($v)=> ltrim($v," $W"?'W/':''),explode(',',$IF)));
-      };
-
-      if(isset($_SERVER['HTTP_IF_NONE_MATCH']) && $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH'])){
-        http_response_code(304);
-        return '';
-      }else
-        header("ETag: $etag");
-
-    }
-
-    return $payload;
-
-  }#}}}
 
 
   final private static function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
