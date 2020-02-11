@@ -3,7 +3,10 @@
 abstract class srv{
 
   function __toString(){
-    return $this($_SERVER['REQUEST_METHOD']);
+    $ret = $this($_SERVER['REQUEST_METHOD']);
+    header('Content-Length: '.strlen($ret));
+    self::CORS();
+    return self::etag($ret);
   }
 
   /**
@@ -56,22 +59,21 @@ abstract class srv{
     $this->GET(...self::query2parameters('GET', $_GET));
   }
 
-  function GET(){
-  }
+  function GET(){}
 
   final function __invoke(string $verb):string{
 
     try{
-      if(!in_array(strtoupper($verb),self::method())) throw new \BadMethodCallException('Not Implemented',501);
       ob_start();
+      if(!in_array(strtoupper($verb),self::method())) throw new \BadMethodCallException('Not Implemented',501);
       $ret = static::$verb(...self::query2parameters($verb, $_GET))??'';
       if(ob_get_length()) throw new \Error('-1 Internal Server Error',500);
 
       if(is_scalar($ret))
-        return self::etag($ret);
+        return $ret;
 
       header('Content-Type: application/json;charset=UTF-8');
-      return self::etag(json_encode($ret, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR));
+      return json_encode($ret, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR);
 
     }catch(\Throwable $t){
       header_remove();
@@ -86,14 +88,13 @@ abstract class srv{
       }
 
       header('Content-Type: application/json;charset=UTF-8');
-      return self::etag(json_encode([
+      return json_encode([
         'code'=>(int)$code==(float)$code?(int)$code:(float)$code,
         'reason'=>(string)$reason,
-      ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION));
+      ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
 
     }finally{
       ob_end_clean();
-      self::CORS();
     }
   }
 
@@ -135,10 +136,6 @@ abstract class srv{
   }
 
 
-  /**
-   * @todo 一组数据，如何设置Last-Modified，以及如何同时处理对应的If-Modified-Since
-   * @fixme 内容协商自带Vary: negotiate和Content-Location，如何覆盖？
-   */
   final private static function etag(string $payload):string{#{{{
     if(
       !headers_sent() &&
