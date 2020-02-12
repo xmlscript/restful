@@ -10,7 +10,7 @@ abstract class srv{
   final function __toString():string{//{{{
     try{
       ob_start();
-      $ret = $this($_SERVER['REQUEST_METHOD']);
+      $ret = $this($_SERVER['REQUEST_METHOD'])??'';
       if(ob_get_length()) throw new \Error('-1 Internal Server Error',500);
       if(!is_string($ret)){
         header('Content-Type: application/json;charset=UTF-8');
@@ -110,12 +110,11 @@ abstract class srv{
       header('Access-Control-Allow-Credentials: true');//FIXME 尚未执行目标方法之前，无法获知
 
     }
-    http_response_code(204);
   }#}}}
 
 
-  final function HEAD():void{
-    $this->GET(...self::query2parameters('GET', $_GET));
+  final function HEAD(){
+    return static::GET(...self::query2parameters('GET', $_GET));
   }
 
   function GET(){}
