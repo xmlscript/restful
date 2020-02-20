@@ -67,9 +67,9 @@ abstract class srv{
       if(
         !headers_sent() &&
         !in_array(http_response_code(),[304,412,204,206,416])
-      ){//ETag
+      ){
 
-        $etag = '"'.crc32(join(headers_list()).$ret).'"';
+        $etag = '"'.crc32($ret).'"';
 
         $comp = function(string $etag, ?string $IF, bool $W=true):bool{
           return $IF && in_array($etag, array_map(fn($v)=> ltrim($v," $W"?'W/':''),explode(',',$IF)));
@@ -78,13 +78,23 @@ abstract class srv{
         if(isset($_SERVER['HTTP_IF_NONE_MATCH']) && $comp($etag,$_SERVER['HTTP_IF_NONE_MATCH']))
           http_response_code(304);
         else
-          header("ETag: $etag");
+          header("ETag: W/$etag");
       }
+
+      //TODO POST时将携带If-Match，如果无法匹配对应的etag，则表示内容已被篡改，返回412
+      //TODO ETag不该包括header，而且应该独立函数供存取
 
       if(self::header('Content-Type')) header('X-Content-Type-Options: nosniff');
 
       if(isset($_SERVER['SSL_SERVER_V_END']))//FIXME nginx是否正确实现
-        header('Strict-Transport-Security: max-age='.(strtotime($_SERVER['SSL_SERVER_V_END'])-time()).'; includeSubDomains');
+        header('Strict-Transport-Security: max-age='.(strtotime($_SERVER['SSL_SERVER_V_END'])-time()).'; includeSubDomains; preload');
+      //FIXME 后缀的preload，能否这样用，有什么作用？
+
+      //SEE https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Caching_FAQ
+      //SEE https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Headers/Cache-Control
+      //header('Cache-Control: no-cache, no-store, must-revalidate');
+      //header('Cache-Control: public, s-maxage=600, max-age=60');
+      //header('Cache-Control: public, max-age=600');//FIXME 与php原生session的冲突？
 
       if(isset($_SERVER['HTTP_LAST_EVENT_ID']));
 
