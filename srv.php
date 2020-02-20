@@ -1,17 +1,26 @@
 <?php namespace http; // vim: se fdm=marker:
 
+/**
+ * @todo 兼容cli模式，至少不能报错
+ */
 abstract class srv{
 
   final function __invoke(string $verb){
     if(!in_array(strtoupper($verb),self::method())) throw new \BadMethodCallException('Not Implemented',501);
-    return static::$verb(...self::query2parameters($verb, $_GET));
+    ob_start();
+    $ret = static::$verb(...self::query2parameters($verb, $_GET));
+    if(ob_get_length()){
+      ob_end_clean();
+      throw new \Error('-1 Internal Server Error',500);
+    }
+    ob_end_clean();
+    return $ret;
   }
 
   final function __toString():string{//{{{
     try{
-      ob_start();
       $ret = $this($_SERVER['REQUEST_METHOD'])??'';
-      if(ob_get_length()) throw new \Error('-1 Internal Server Error',500);
+
       if(!is_string($ret)){
         header('Content-Type: application/json;charset=UTF-8');
         $ret = json_encode($ret, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR);
@@ -35,8 +44,8 @@ abstract class srv{
       ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
 
     }finally{
-      ob_end_clean();
 
+      //FIXME 有可能被httpd的输出过滤器更改内容
       header('Content-Length: '.strlen($ret));
 
       if(isset($_SERVER['HTTP_ORIGIN'])){//CORS
@@ -72,6 +81,12 @@ abstract class srv{
           header("ETag: $etag");
       }
 
+      if(self::header('Content-Type')) header('X-Content-Type-Options: nosniff');
+
+      if(isset($_SERVER['SSL_SERVER_V_END']))//FIXME nginx是否正确实现
+        header('Strict-Transport-Security: max-age='.(strtotime($_SERVER['SSL_SERVER_V_END'])-time()).'; includeSubDomains');
+
+      if(isset($_SERVER['HTTP_LAST_EVENT_ID']));
 
       return $ret;
     }
@@ -81,22 +96,7 @@ abstract class srv{
     return array_map('strtoupper',array_filter(array_column((new \ReflectionClass(static::class))->getMethods(\ReflectionMethod::IS_PUBLIC),'name'),'ctype_alpha'));
   }
 
-  /**
-   * CORS适用于
-   * xhr,fetch调用
-   * @font-face加载
-   * WebGL贴图
-   * <canvas>drawImage加载
-   *
-   * 以下安全范围之内，不会触发OPTIONS
-   * HEAD,GET,POST
-   * Accept,Accept-Language, Content-Language,
-   * DPR, Downlink, Save-Data, Viewport-Width, Width
-   * Last-Event-ID, 
-   * Content-Type: application/x-www-form-urlencoded, multipart/form-data, text/plain
-   * xhrUpload对象不能注册listener
-   * 不能使用ReadableStream对象
-   */
+
   final function OPTIONS($age=600):void{#{{{
     if(isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])){
 
@@ -120,8 +120,6 @@ abstract class srv{
   function GET(){}
 
 
-
-  //FIXME 不要考虑Swoole
   final private static function header(string $str):?string{
     foreach(array_reverse(headers_list()) as $item){
       [$k,$v] = explode(':',$item,2);
@@ -130,7 +128,6 @@ abstract class srv{
     }
     return null;
   }
-
 
 
   final private static function check(?string $type, &$value, string $name, bool $allowsNull):\Generator{#{{{
