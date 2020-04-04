@@ -65,6 +65,7 @@ abstract class srv{
 
 
       if(
+        $ret &&
         !headers_sent() &&
         !in_array(http_response_code(),[304,412,204,206,416])
       ){
@@ -87,8 +88,9 @@ abstract class srv{
       if(self::header('Content-Type')) header('X-Content-Type-Options: nosniff');
 
       if(isset($_SERVER['SSL_SERVER_V_END']))//FIXME nginx是否正确实现
-        header('Strict-Transport-Security: max-age='.(strtotime($_SERVER['SSL_SERVER_V_END'])-time()).'; includeSubDomains; preload');
+        //header('Strict-Transport-Security: max-age='.(strtotime($_SERVER['SSL_SERVER_V_END'])-time()).'; includeSubDomains; preload');
       //FIXME 后缀的preload，能否这样用，有什么作用？
+      //FIXME 因为本地模拟的ssl，所以Firefox报错，不信任https所以忽略STS
 
       //SEE https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Caching_FAQ
       //SEE https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Headers/Cache-Control
@@ -107,10 +109,10 @@ abstract class srv{
   }
 
 
-  final function OPTIONS($age=600):void{#{{{
+  final function OPTIONS(int $age=6):void{#{{{
     if(isset($_SERVER['HTTP_ORIGIN'],$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])){
 
-      header('Access-Control-Max-Age: '.is_numeric($age)&&settype($age,'int')?$age:600);
+      header("Access-Control-Max-Age: $age");
       header('Access-Control-Allow-Methods: '.implode(', ',self::method()));
 
       if(isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']) &&
