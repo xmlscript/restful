@@ -2,6 +2,21 @@
 
 /**
  * @todo 兼容cli模式，至少不能报错
+ * @todo API不要和Web混合部署，否则sid混淆
+ * @todo 调整sid强度，以适应token的要求
+ * @todo httpd.conf不要启用Expires，否则出现Expires和Cache-Control
+ * @todo httpd.conf不要针对API设置Keep-Alive
+ * @todo session.save_handler或session_module_name()='files'时，应该warn给log或header
+ * @todo ini_set('session.cookie_domain','');
+ * @todo ini_set('session.cookie_samesite','Lax');
+ * @todo ini_set('session.use_strict_mode','On');
+ * @todo ini_set('session.trans_sid_hosts','');
+ * @todo ini_set('session.referer_check','');
+ * @todo ini_set('session.cache_limiter','');
+ * @todo ini_set('session.sid_length','');
+ * @todo ini_set('session.use_only_cookies','');//必须早于session_start()
+ * @todo ini_set('session.sid_bits_per_character','');
+ * @todo ini_set('session.hash_function','sha512');
  */
 abstract class srv{
 
@@ -26,8 +41,11 @@ abstract class srv{
         $ret = json_encode($ret, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR);
       }
     }catch(\Throwable $t){
-      header_remove();
+      //FIXME 之前的Location跳转清空实效，是否反直觉？
+      header_remove();//FIXME 401关联的WWW-Authenticate, 503关联的retry怎么办？
       http_response_code(max(-1,$t->getCode())?:500);
+
+      //TODO 异常计数器，共原生API调用。用PHP内置的APCu记录
 
       if($t->getCode() === 0){
         $code = 0;
@@ -133,7 +151,8 @@ abstract class srv{
 
 
   final private static function header(string $str):?string{
-    foreach(array_reverse(headers_list()) as $item){
+    //FIXME header(number)这种错误格式导致空白页面，但仍继续执行误导后续逻辑
+    foreach(array_filter(headers_list(),fn($i)=>strpos($i,':')) as $item){
       [$k,$v] = explode(':',$item,2);
       if(strcasecmp($str, $k)===0)
         return trim($v);
